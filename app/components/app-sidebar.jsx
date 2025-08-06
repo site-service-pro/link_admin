@@ -39,8 +39,8 @@ const menuItems = [
     icon: Home,
   },
   {
-    title: "Users",
-    url: "/dashboard/users",
+    title: "Riders",
+    url: "/dashboard/rider",
     icon: Users,
   },
   {

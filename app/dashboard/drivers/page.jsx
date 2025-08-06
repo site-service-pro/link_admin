@@ -70,14 +70,15 @@ export default function DriversAdminPage() {
 
     if (tableFilters.kycStatus) {
       filtered = filtered.filter(driver => {
-        const status = driver.kycStatus || 'not-submitted';
+        const status = getKYCDisplayStatus(driver.kyc_approved, driver.kycStatus, Object.keys(driver.kycDocuments || {}).length);
         return status === tableFilters.kycStatus;
       });
     }
 
     if (tableFilters.vehicleStatus) {
       filtered = filtered.filter(driver => {
-        const status = driver.vehicleStatus || 'not-submitted';
+        const isActive = driver.vehicleActive !== false;
+        const status = isActive ? 'active' : 'inactive';
         return status === tableFilters.vehicleStatus;
       });
     }
@@ -136,19 +137,20 @@ export default function DriversAdminPage() {
       });
     }
 
-    // KYC filter
+    // KYC filter - Updated to work with boolean system
     if (filters.kycFilter !== 'all') {
       filtered = filtered.filter(driver => {
-        const kycStatus = driver.kycStatus || 'not-submitted';
-        return kycStatus === filters.kycFilter;
+        const status = getKYCDisplayStatus(driver.kyc_approved, driver.kycStatus, Object.keys(driver.kycDocuments || {}).length);
+        return status === filters.kycFilter;
       });
     }
 
-    // Vehicle filter
+    // Vehicle filter - Updated for active/inactive
     if (filters.vehicleFilter !== 'all') {
       filtered = filtered.filter(driver => {
-        const vehicleStatus = driver.vehicleStatus || 'not-submitted';
-        return vehicleStatus === filters.vehicleFilter;
+        const isActive = driver.vehicleActive !== false;
+        const status = isActive ? 'active' : 'inactive';
+        return status === filters.vehicleFilter;
       });
     }
 
@@ -199,29 +201,39 @@ export default function DriversAdminPage() {
     }));
   };
 
-  // Fetch drivers with their KYC documents and vehicles
+  // Fetch drivers from 'users' collection with their KYC documents and vehicles
   const fetchDriversWithKycAndVehicles = async () => {
     setLoading(true);
     try {
-      const driversQuery = query(collection(db, 'drivers'), orderBy('createdAt', 'desc'));
-      const driversSnapshot = await getDocs(driversQuery);
+      const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      const usersSnapshot = await getDocs(usersQuery);
 
       const driversData = await Promise.all(
-        driversSnapshot.docs.map(async (driverDoc) => {
-          const driverData = driverDoc.data();
-          const driverId = driverDoc.id;
+        usersSnapshot.docs.map(async (userDoc) => {
+          const userData = userDoc.data();
+          const userId = userDoc.id;
+
+          // Only include users with role 'driver'
+          if (userData.role !== 'driver') {
+            return null;
+          }
 
           // 1. Fetch KYC documents from 'kyc' subcollection
-          const kycQuery = collection(db, 'drivers', driverId, 'kyc');
+          const kycQuery = collection(db, 'users', userId, 'kyc');
           const kycSnapshot = await getDocs(kycQuery);
           let kycDocuments = {};
           kycSnapshot.forEach(doc => {
             const docData = doc.data();
-            kycDocuments[doc.id] = docData.url || docData.photoUrl || docData.fileUrl || docData.documentUrl;
+            kycDocuments[doc.id] = {
+              url: docData.url || docData.photoUrl || docData.fileUrl || docData.documentUrl,
+              uploadedAt: docData.uploadedAt || docData.createdAt,
+              type: docData.type || doc.id,
+              ...docData
+            };
           });
 
           // 2. Fetch vehicle from 'vehicles' subcollection
-          const vehiclesQuery = collection(db, 'drivers', driverId, 'vehicles');
+          const vehiclesQuery = collection(db, 'users', userId, 'vehicles');
           const vehiclesSnapshot = await getDocs(vehiclesQuery);
           let vehicle = null;
           if (!vehiclesSnapshot.empty) {
@@ -230,26 +242,74 @@ export default function DriversAdminPage() {
           }
 
           return {
-            id: driverId,
-            ...driverData,
+            id: userId,
+            ...userData,
             kycDocuments,
             vehicle,
           };
         })
       );
 
-      setDrivers(driversData);
-      setFilteredDrivers(driversData); // Initialize filtered drivers
+      const filteredDriversData = driversData.filter(driver => driver !== null);
+      
+      setDrivers(filteredDriversData);
+      setFilteredDrivers(filteredDriversData);
     } catch (error) {
       console.error('Error fetching drivers, KYC, and vehicles:', error);
     }
     setLoading(false);
   };
 
-  // Toggle driver status (activate/deactivate)
+  // Get KYC Display Status Based on Boolean Field and Document Count
+  const getKYCDisplayStatus = (kycApproved, kycStatus, documentCount) => {
+    if (typeof kycApproved === 'boolean') {
+      return kycApproved ? 'verified' : 'pending';
+    }
+    if (documentCount > 0 && (!kycStatus || kycStatus === 'not-submitted')) {
+      return 'submitted';
+    }
+    return kycStatus || 'not-submitted';
+  };
+
+  // Update KYC Status with Boolean Field
+  const updateKYCStatus = async (driverId, approved, reason = null) => {
+    try {
+      const updateData = {
+        kyc_approved: approved,
+        kycStatus: approved ? 'verified' : 'rejected',
+        kycVerifiedAt: approved ? new Date() : null,
+        kycRejectedAt: !approved ? new Date() : null,
+        updatedAt: new Date(),
+      };
+
+      if (reason && !approved) {
+        updateData.kycRejectionReason = reason;
+      }
+
+      await updateDoc(doc(db, 'users', driverId), updateData);
+      
+      const updatedDrivers = drivers.map(driver =>
+        driver.id === driverId ? { ...driver, ...updateData } : driver
+      );
+      setDrivers(updatedDrivers);
+      
+      setFilteredDrivers(prevFiltered =>
+        prevFiltered.map(driver =>
+          driver.id === driverId ? { ...driver, ...updateData } : driver
+        )
+      );
+
+      console.log(`KYC ${approved ? 'approved' : 'rejected'} successfully for driver ${driverId}`);
+    } catch (error) {
+      console.error('Error updating KYC status:', error);
+      alert('Error updating KYC status. Please try again.');
+    }
+  };
+
+  // Toggle driver status
   const setDriverStatus = async (driverId, newStatus) => {
     try {
-      await updateDoc(doc(db, 'drivers', driverId), {
+      await updateDoc(doc(db, 'users', driverId), {
         is_active: newStatus,
         updatedAt: new Date(),
       });
@@ -258,7 +318,6 @@ export default function DriversAdminPage() {
       );
       setDrivers(updatedDrivers);
       
-      // Update filtered drivers too
       setFilteredDrivers(prevFiltered => 
         prevFiltered.map(driver =>
           driver.id === driverId ? { ...driver, is_active: newStatus } : driver
@@ -269,70 +328,141 @@ export default function DriversAdminPage() {
     }
   };
 
-  // Update KYC verification status
-  const updateKYCStatus = async (driverId, status) => {
+  // Update vehicle status (Active/Inactive)
+  const updateVehicleStatus = async (driverId, isActive) => {
     try {
-      await updateDoc(doc(db, 'drivers', driverId), {
-        kycStatus: status,
-        kycVerifiedAt: status === 'verified' ? new Date() : null,
+      const updateData = {
+        vehicleActive: isActive,
         updatedAt: new Date(),
-      });
-      const updatedDrivers = drivers.map(driver =>
-        driver.id === driverId ? { ...driver, kycStatus: status } : driver
-      );
-      setDrivers(updatedDrivers);
-      
-      // Update filtered drivers too
-      setFilteredDrivers(prevFiltered =>
-        prevFiltered.map(driver =>
-          driver.id === driverId ? { ...driver, kycStatus: status } : driver
-        )
-      );
-    } catch (error) {
-      console.error('Error updating KYC status:', error);
-    }
-  };
+      };
 
-  // Update vehicle verification status
-  const updateVehicleStatus = async (driverId, status) => {
-    try {
-      await updateDoc(doc(db, 'drivers', driverId), {
-        vehicleStatus: status,
-        vehicleVerifiedAt: status === 'verified' ? new Date() : null,
-        updatedAt: new Date(),
-      });
+      await updateDoc(doc(db, 'users', driverId), updateData);
+      
       const updatedDrivers = drivers.map(driver =>
-        driver.id === driverId ? { ...driver, vehicleStatus: status } : driver
+        driver.id === driverId ? { ...driver, ...updateData } : driver
       );
       setDrivers(updatedDrivers);
       
-      // Update filtered drivers too
       setFilteredDrivers(prevFiltered =>
         prevFiltered.map(driver =>
-          driver.id === driverId ? { ...driver, vehicleStatus: status } : driver
+          driver.id === driverId ? { ...driver, ...updateData } : driver
         )
       );
+
+      console.log(`Vehicle ${isActive ? 'activated' : 'deactivated'} successfully for driver ${driverId}`);
     } catch (error) {
       console.error('Error updating vehicle status:', error);
+      alert('Error updating vehicle status. Please try again.');
     }
   };
 
-  // Status badge helper
-  const getStatusBadge = (status) => {
+  // Enhanced Status Badge with Boolean Support
+  const getStatusBadge = (kycApproved, kycStatus, documentCount = 0) => {
+    const displayStatus = getKYCDisplayStatus(kycApproved, kycStatus, documentCount);
+    
     const statusConfig = {
-      verified: { color: 'bg-green-100 text-green-700', icon: CheckCircle, text: 'Verified' },
-      rejected: { color: 'bg-red-100 text-red-700', icon: XCircle, text: 'Rejected' },
-      pending: { color: 'bg-yellow-100 text-yellow-700', icon: Clock, text: 'Pending' },
-      incomplete: { color: 'bg-orange-100 text-orange-700', icon: FileText, text: 'Incomplete' },
-      'not-submitted': { color: 'bg-gray-100 text-gray-500', icon: FileText, text: 'Not Submitted' }
+      verified: { color: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircle, text: 'Verified' },
+      rejected: { color: 'bg-red-100 text-red-700 border-red-200', icon: XCircle, text: 'Rejected' },
+      pending: { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', icon: Clock, text: 'Pending' },
+      submitted: { color: 'bg-blue-100 text-blue-700 border-blue-200', icon: FileText, text: 'Submitted' },
+      incomplete: { color: 'bg-orange-100 text-orange-700 border-orange-200', icon: FileText, text: 'Incomplete' },
+      'not-submitted': { color: 'bg-gray-100 text-gray-500 border-gray-200', icon: FileText, text: 'Not Submitted' }
     };
-    const config = statusConfig[status] || statusConfig['not-submitted'];
+    
+    const config = statusConfig[displayStatus] || statusConfig['not-submitted'];
     const IconComponent = config.icon;
+    
     return (
-      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold ${config.color}`}>
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${config.color}`}>
         <IconComponent className="w-3 h-3" />
         {config.text}
       </span>
+    );
+  };
+
+  // Vehicle Status Badge
+  const getVehicleStatusBadge = (isActive) => {
+    const statusConfig = {
+      active: { 
+        color: 'bg-green-100 text-green-700 border-green-200', 
+        icon: CheckCircle, 
+        text: 'Active'
+      },
+      inactive: { 
+        color: 'bg-gray-100 text-gray-500 border-gray-200', 
+        icon: XCircle, 
+        text: 'Inactive'
+      }
+    };
+    
+    const status = isActive ? 'active' : 'inactive';
+    const config = statusConfig[status];
+    const IconComponent = config.icon;
+    
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${config.color}`}>
+        <IconComponent className="w-3 h-3" />
+        {config.text}
+      </span>
+    );
+  };
+
+  // Enhanced KYC Status Badge with Document Count
+  const getKYCStatusBadgeWithCount = (status, documentCount, driver) => {
+    const displayStatus = getKYCDisplayStatus(driver.kyc_approved, status, documentCount);
+    
+    const statusConfig = {
+      verified: { 
+        color: 'bg-green-100 text-green-700 border-green-200', 
+        icon: CheckCircle, 
+        text: 'Verified',
+        countColor: 'text-green-600'
+      },
+      rejected: { 
+        color: 'bg-red-100 text-red-700 border-red-200', 
+        icon: XCircle, 
+        text: 'Rejected',
+        countColor: 'text-red-600'
+      },
+      pending: { 
+        color: 'bg-yellow-100 text-yellow-700 border-yellow-200', 
+        icon: Clock, 
+        text: 'Pending',
+        countColor: 'text-yellow-600'
+      },
+      submitted: {
+        color: 'bg-blue-100 text-blue-700 border-blue-200',
+        icon: FileText,
+        text: 'Submitted',
+        countColor: 'text-blue-600'
+      },
+      incomplete: { 
+        color: 'bg-orange-100 text-orange-700 border-orange-200', 
+        icon: FileText, 
+        text: 'Incomplete',
+        countColor: 'text-orange-600'
+      },
+      'not-submitted': { 
+        color: 'bg-gray-100 text-gray-500 border-gray-200', 
+        icon: FileText, 
+        text: 'Not Submitted',
+        countColor: 'text-gray-500'
+      }
+    };
+    
+    const config = statusConfig[displayStatus] || statusConfig['not-submitted'];
+    const IconComponent = config.icon;
+    
+    return (
+      <div className="space-y-2">
+        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs font-semibold border ${config.color}`}>
+          <IconComponent className="w-3 h-3" />
+          {config.text}
+        </span>
+        <p className={`text-xs font-medium ${config.countColor}`}>
+          KYC Documents ({documentCount})
+        </p>
+      </div>
     );
   };
 
@@ -350,9 +480,34 @@ export default function DriversAdminPage() {
       .replace('Id', 'ID');
   };
 
-  // Three-dot dropdown menu component
+  // Enhanced download function
+  const downloadDocument = async (url, filename) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.target = '_blank';
+      link.click();
+    }
+  };
+
+  // Enhanced Actions Dropdown
   const ActionsDropdown = ({ driver }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const displayStatus = getKYCDisplayStatus(driver.kyc_approved, driver.kycStatus, Object.keys(driver.kycDocuments || {}).length);
+    const hasPendingKYC = Object.keys(driver.kycDocuments || {}).length > 0 && displayStatus !== 'verified';
 
     return (
       <div className="relative">
@@ -369,7 +524,7 @@ export default function DriversAdminPage() {
               className="fixed inset-0 z-10" 
               onClick={() => setIsOpen(false)}
             ></div>
-            <div className="absolute right-0 mt-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+            <div className="absolute right-0 mt-1 w-52 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
               <div className="py-1">
                 <button
                   onClick={() => {
@@ -379,58 +534,64 @@ export default function DriversAdminPage() {
                   className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
                 >
                   <Eye className="w-4 h-4 mr-3" />
-                  View Details
+                  View Details & Documents
                 </button>
                 
                 <div className="border-t border-gray-100 my-1"></div>
                 
-                {driver.kycStatus === 'pending' && (
+                {/* KYC Actions */}
+                {hasPendingKYC && displayStatus !== 'verified' && (
                   <>
                     <button
                       onClick={() => {
-                        updateKYCStatus(driver.id, 'verified');
+                        updateKYCStatus(driver.id, true);
                         setIsOpen(false);
                       }}
                       className="flex items-center w-full px-4 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors"
                     >
                       <CheckCircle className="w-4 h-4 mr-3" />
-                      Approve KYC
+                      ✓ Verify KYC (Approve)
                     </button>
                     <button
                       onClick={() => {
-                        updateKYCStatus(driver.id, 'rejected');
+                        const reason = prompt('Reason for rejection (optional):');
+                        updateKYCStatus(driver.id, false, reason);
                         setIsOpen(false);
                       }}
                       className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
                     >
                       <XCircle className="w-4 h-4 mr-3" />
-                      Reject KYC
+                      ✗ Reject KYC
                     </button>
                     <div className="border-t border-gray-100 my-1"></div>
                   </>
                 )}
                 
-                {driver.vehicleStatus === 'pending' && (
+                {/* Vehicle Actions */}
+                {driver.vehicle && (
                   <>
                     <button
                       onClick={() => {
-                        updateVehicleStatus(driver.id, 'verified');
+                        updateVehicleStatus(driver.id, !(driver.vehicleActive !== false));
                         setIsOpen(false);
                       }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-blue-700 hover:bg-blue-50 transition-colors"
+                      className={`flex items-center w-full px-4 py-2 text-sm transition-colors ${
+                        driver.vehicleActive !== false
+                          ? 'text-red-700 hover:bg-red-50' 
+                          : 'text-green-700 hover:bg-green-50'
+                      }`}
                     >
-                      <Car className="w-4 h-4 mr-3" />
-                      Approve Vehicle
-                    </button>
-                    <button
-                      onClick={() => {
-                        updateVehicleStatus(driver.id, 'rejected');
-                        setIsOpen(false);
-                      }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-red-700 hover:bg-red-50 transition-colors"
-                    >
-                      <XCircle className="w-4 h-4 mr-3" />
-                      Reject Vehicle
+                      {driver.vehicleActive !== false ? (
+                        <>
+                          <XCircle className="w-4 h-4 mr-3" />
+                          Deactivate Vehicle
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-3" />
+                          Activate Vehicle
+                        </>
+                      )}
                     </button>
                     <div className="border-t border-gray-100 my-1"></div>
                   </>
@@ -506,7 +667,7 @@ export default function DriversAdminPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
-              {drivers.filter(d => d.kycStatus === 'pending').length}
+              {drivers.filter(d => getKYCDisplayStatus(d.kyc_approved, d.kycStatus, Object.keys(d.kycDocuments || {}).length) === 'pending').length}
             </div>
           </CardContent>
         </Card>
@@ -518,7 +679,7 @@ export default function DriversAdminPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {drivers.filter(d => d.kycStatus === 'verified').length}
+              {drivers.filter(d => getKYCDisplayStatus(d.kyc_approved, d.kycStatus, Object.keys(d.kycDocuments || {}).length) === 'verified').length}
             </div>
           </CardContent>
         </Card>
@@ -536,6 +697,14 @@ export default function DriversAdminPage() {
         </Card>
       </div>
 
+      {/* Add the DriversTableFilter component */}
+      <DriversTableFilter 
+        onFilterChange={handleFilterChange}
+        totalCount={drivers.length}
+        filteredCount={filteredDrivers.length}
+        onSort={handleSort}
+        sortConfig={sortConfig}
+      />
 
       {/* Enhanced Table with In-Table Filters */}
       <Card>
@@ -565,7 +734,7 @@ export default function DriversAdminPage() {
                         <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
                         <input
                           type="text"
-                          placeholder="Filter by name..."
+                          placeholder="Search drivers..."
                           value={tableFilters.name}
                           onChange={(e) => handleTableFilterChange('name', e.target.value)}
                           className="w-full pl-7 pr-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
@@ -579,16 +748,13 @@ export default function DriversAdminPage() {
                       <span>Vehicle</span>
                     </div>
                     <div className="mt-2">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-3 h-3 text-gray-400" />
-                        <input
-                          type="text"
-                          placeholder="Filter vehicle..."
-                          value={tableFilters.vehicle}
-                          onChange={(e) => handleTableFilterChange('vehicle', e.target.value)}
-                          className="w-full pl-7 pr-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        />
-                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search vehicles..."
+                        value={tableFilters.vehicle}
+                        onChange={(e) => handleTableFilterChange('vehicle', e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
                     </div>
                   </TableHead>
                   
@@ -606,7 +772,7 @@ export default function DriversAdminPage() {
                         <option value="pending">Pending</option>
                         <option value="verified">Verified</option>
                         <option value="rejected">Rejected</option>
-                        <option value="not-submitted">Not Submitted</option>
+                        <option value="submitted">Submitted</option>
                       </select>
                     </div>
                   </TableHead>
@@ -621,24 +787,16 @@ export default function DriversAdminPage() {
                         onChange={(e) => handleTableFilterChange('vehicleStatus', e.target.value)}
                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                       >
-                        <option value="">All Vehicle</option>
-                        <option value="pending">Pending</option>
-                        <option value="verified">Verified</option>
-                        <option value="rejected">Rejected</option>
-                        <option value="not-submitted">Not Submitted</option>
+                        <option value="">All Vehicles</option>
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
                       </select>
                     </div>
                   </TableHead>
                   
                   <TableHead>
                     <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleSort('createdAt')}
-                        className="flex items-center space-x-1 text-left hover:text-blue-600"
-                      >
-                        <span>Joined</span>
-                        <ArrowUpDown className="w-3 h-3" />
-                      </button>
+                      <span>Joined</span>
                     </div>
                   </TableHead>
                   
@@ -695,69 +853,49 @@ export default function DriversAdminPage() {
                     </TableCell>
                     
                     <TableCell>
-                      {driver.vehicle ? (
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium">
-                            {driver.vehicle.brand} {driver.vehicle.model}
-                          </p>
-                          <span className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
-                            {driver.vehicle.category}
-                          </span>
-                          <p className="text-xs text-muted-foreground">
-                            {driver.vehicle.number}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-muted-foreground">
-                          <Car className="h-4 w-4" />
-                          <span className="text-sm">No vehicle</span>
-                        </div>
-                      )}
-                    </TableCell>
-                    
-                    <TableCell>
                       <div className="space-y-2">
-                        {getStatusBadge(driver.kycStatus || 'not-submitted')}
-                        <p className="text-xs text-muted-foreground">
-                          {Object.keys(driver.kycDocuments || {}).length} docs
-                        </p>
-                        {driver.kycStatus === 'pending' && (
-                          <div className="flex gap-1">
-                            <button
-                              className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                              onClick={() => updateKYCStatus(driver.id, 'verified')}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                              onClick={() => updateKYCStatus(driver.id, 'rejected')}
-                            >
-                              Reject
-                            </button>
+                        {driver.vehicle ? (
+                          <>
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium">
+                                {driver.vehicle.brand} {driver.vehicle.model}
+                              </p>
+                              <span className="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded">
+                                {driver.vehicle.category}
+                              </span>
+                              <p className="text-xs text-muted-foreground">
+                                {driver.vehicle.number}
+                              </p>
+                            </div>
+                            {getVehicleStatusBadge(driver.vehicleActive !== false)}
+                          </>
+                        ) : (
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Car className="h-4 w-4" />
+                            <span className="text-sm">No vehicle</span>
                           </div>
                         )}
                       </div>
                     </TableCell>
                     
+                    {/* UPDATED: KYC Status Cell - Approve/Reject Buttons REMOVED */}
                     <TableCell>
                       <div className="space-y-2">
-                        {getStatusBadge(driver.vehicleStatus || 'not-submitted')}
-                        {driver.vehicleStatus === 'pending' && (
-                          <div className="flex gap-1">
-                            <button
-                              className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600"
-                              onClick={() => updateVehicleStatus(driver.id, 'verified')}
-                            >
-                              Approve
-                            </button>
-                            <button
-                              className="px-2 py-1 text-xs bg-red-500 text-white rounded hover:bg-red-600"
-                              onClick={() => updateVehicleStatus(driver.id, 'rejected')}
-                            >
-                              Reject
-                            </button>
-                          </div>
+                        {getKYCStatusBadgeWithCount(
+                          driver.kycStatus || 'not-submitted', 
+                          Object.keys(driver.kycDocuments || {}).length,
+                          driver
+                        )}
+                        {/* REMOVED: Approve/Reject buttons are no longer here */}
+                      </div>
+                    </TableCell>
+                    
+                    <TableCell>
+                      <div className="space-y-2">
+                        {driver.vehicle ? (
+                          getVehicleStatusBadge(driver.vehicleActive !== false)
+                        ) : (
+                          <span className="text-xs text-gray-500">No vehicle</span>
                         )}
                       </div>
                     </TableCell>
@@ -791,7 +929,7 @@ export default function DriversAdminPage() {
         </CardContent>
       </Card>
 
-      {/* Document Viewer Modal */}
+      {/* Enhanced Document Viewer Modal */}
       {showDocuments && selectedDriver && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto">
@@ -832,6 +970,7 @@ export default function DriversAdminPage() {
                   <div><strong>Email:</strong> {selectedDriver.email || 'Not provided'}</div>
                   <div><strong>Phone:</strong> {selectedDriver.phone || 'Not provided'}</div>
                   <div><strong>UID:</strong> {selectedDriver.uid || 'Not provided'}</div>
+                  <div><strong>Username:</strong> {selectedDriver.username || 'Not provided'}</div>
                   <div>
                     <strong>Status:</strong>
                     <span className={`ml-2 px-2 py-1 rounded text-xs ${
@@ -843,7 +982,11 @@ export default function DriversAdminPage() {
                   <div>
                     <strong>KYC Status:</strong>
                     <span className="ml-2">
-                      {getStatusBadge(selectedDriver.kycStatus || 'not-submitted')}
+                      {getStatusBadge(
+                        selectedDriver.kyc_approved, 
+                        selectedDriver.kycStatus, 
+                        Object.keys(selectedDriver.kycDocuments || {}).length
+                      )}
                     </span>
                   </div>
                 </CardContent>
@@ -878,7 +1021,7 @@ export default function DriversAdminPage() {
                       <div>
                         <strong>Vehicle Status:</strong>
                         <span className="ml-2">
-                          {getStatusBadge(selectedDriver.vehicleStatus || 'not-submitted')}
+                          {getVehicleStatusBadge(selectedDriver.vehicleActive !== false)}
                         </span>
                       </div>
 
@@ -894,12 +1037,10 @@ export default function DriversAdminPage() {
                               View Document
                             </button>
                             <button
-                              onClick={() => {
-                                const link = document.createElement('a');
-                                link.href = selectedDriver.vehicle.documentUrl;
-                                link.download = `${selectedDriver.name}_vehicle_document`;
-                                link.click();
-                              }}
+                              onClick={() => downloadDocument(
+                                selectedDriver.vehicle.documentUrl,
+                                `${selectedDriver.name}_vehicle_document`
+                              )}
                               className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
                             >
                               <Download className="w-3 h-3" />
@@ -915,77 +1056,93 @@ export default function DriversAdminPage() {
                 </CardContent>
               </Card>
 
-              {/* KYC Documents */}
+              {/* Enhanced KYC Documents */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     KYC Documents ({Object.keys(selectedDriver.kycDocuments || {}).length})
+                    <span className="ml-2">
+                      {getStatusBadge(
+                        selectedDriver.kyc_approved, 
+                        selectedDriver.kycStatus, 
+                        Object.keys(selectedDriver.kycDocuments || {}).length
+                      )}
+                    </span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
                     {selectedDriver.kycDocuments && Object.keys(selectedDriver.kycDocuments).length > 0 ? (
-                      Object.entries(selectedDriver.kycDocuments).map(([docType, docUrl]) => (
-                        <div key={docType} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                          <span className="text-sm font-medium">{formatDocumentName(docType)}</span>
+                      Object.entries(selectedDriver.kycDocuments).map(([docType, docData]) => (
+                        <div key={docType} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                          <div className="flex-1">
+                            <span className="text-sm font-medium block">{formatDocumentName(docType)}</span>
+                            <span className={`text-xs ${
+                              docData.url ? 'text-green-600' : 'text-red-500'
+                            }`}>
+                              {docData.url ? '✓ Submitted' : '✗ Not uploaded'}
+                            </span>
+                          </div>
                           <div className="flex gap-2">
-                            {docUrl ? (
+                            {docData.url ? (
                               <>
                                 <button
-                                  onClick={() => window.open(docUrl, '_blank')}
-                                  className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1"
+                                  onClick={() => window.open(docData.url, '_blank')}
+                                  className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 transition-colors"
                                 >
                                   <Eye className="w-3 h-3" />
                                   View
                                 </button>
                                 <button
-                                  onClick={() => {
-                                    const link = document.createElement('a');
-                                    link.href = docUrl;
-                                    link.download = `${selectedDriver.name}_${docType}`;
-                                    link.click();
-                                  }}
-                                  className="px-2 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
+                                  onClick={() => downloadDocument(
+                                    docData.url,
+                                    `${selectedDriver.name}_${docType}`
+                                  )}
+                                  className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 transition-colors"
                                 >
                                   <Download className="w-3 h-3" />
                                   Download
                                 </button>
                               </>
                             ) : (
-                              <span className="text-xs text-gray-500">No file</span>
+                              <span className="text-xs text-gray-500 px-3 py-1 bg-gray-200 rounded">No file</span>
                             )}
                           </div>
                         </div>
                       ))
                     ) : (
-                      <p className="text-gray-500 text-sm">No KYC documents uploaded</p>
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                        <p>No KYC documents submitted</p>
+                      </div>
                     )}
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-            {/* Modal Actions */}
-            <div className="mt-6 flex flex-wrap justify-center gap-4">
-              {selectedDriver.kycStatus === 'pending' && (
+            {/* Action Buttons (These remain in the modal) */}
+            <div className="flex justify-center gap-4 mt-6">
+              {getKYCDisplayStatus(selectedDriver.kyc_approved, selectedDriver.kycStatus, Object.keys(selectedDriver.kycDocuments || {}).length) === 'pending' && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      updateKYCStatus(selectedDriver.id, 'verified');
+                      updateKYCStatus(selectedDriver.id, true);
                       setShowDocuments(false);
                     }}
-                    className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-2"
+                    className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 flex items-center gap-2 transition-colors"
                   >
                     <CheckCircle className="w-4 h-4" />
                     Approve KYC
                   </button>
                   <button
                     onClick={() => {
-                      updateKYCStatus(selectedDriver.id, 'rejected');
+                      const reason = prompt('Reason for rejection (optional):');
+                      updateKYCStatus(selectedDriver.id, false, reason);
                       setShowDocuments(false);
                     }}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 flex items-center gap-2"
+                    className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 flex items-center gap-2 transition-colors"
                   >
                     <XCircle className="w-4 h-4" />
                     Reject KYC
@@ -993,30 +1150,40 @@ export default function DriversAdminPage() {
                 </div>
               )}
               
-              {selectedDriver.vehicleStatus === 'pending' && (
+              {selectedDriver.vehicle && (
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      updateVehicleStatus(selectedDriver.id, 'verified');
+                      updateVehicleStatus(selectedDriver.id, !(selectedDriver.vehicleActive !== false));
                       setShowDocuments(false);
                     }}
-                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-2"
+                    className={`px-6 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                      selectedDriver.vehicleActive !== false
+                        ? 'bg-red-500 text-white hover:bg-red-600'
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                    }`}
                   >
-                    <Car className="w-4 h-4" />
-                    Approve Vehicle
-                  </button>
-                  <button
-                    onClick={() => {
-                      updateVehicleStatus(selectedDriver.id, 'rejected');
-                      setShowDocuments(false);
-                    }}
-                    className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 flex items-center gap-2"
-                  >
-                    <XCircle className="w-4 h-4" />
-                    Reject Vehicle
+                    {selectedDriver.vehicleActive !== false ? (
+                      <>
+                        <XCircle className="w-4 h-4" />
+                        Deactivate Vehicle
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle className="w-4 h-4" />
+                        Activate Vehicle
+                      </>
+                    )}
                   </button>
                 </div>
               )}
+              
+              <button
+                onClick={() => setShowDocuments(false)}
+                className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

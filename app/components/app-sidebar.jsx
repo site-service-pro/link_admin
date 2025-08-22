@@ -54,8 +54,8 @@ const menuItems = [
     icon: CreditCard,
   },
   {
-    title: "Activities",
-    url: "/dashboard/activities", 
+    title: "Bookings",
+    url: "/dashboard/booking", 
     icon: Activity,
   },
 ];

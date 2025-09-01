@@ -21,8 +21,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import DriversTableFilter from '../../components/DriversTableFilter';
-
 export default function DriversAdminPage() {
   const [drivers, setDrivers] = useState([]);
   const [filteredDrivers, setFilteredDrivers] = useState([]);
@@ -696,15 +694,6 @@ export default function DriversAdminPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Add the DriversTableFilter component */}
-      <DriversTableFilter 
-        onFilterChange={handleFilterChange}
-        totalCount={drivers.length}
-        filteredCount={filteredDrivers.length}
-        onSort={handleSort}
-        sortConfig={sortConfig}
-      />
 
       {/* Enhanced Table with In-Table Filters */}
       <Card>

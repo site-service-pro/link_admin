@@ -1,26 +1,18 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithEmailAndPassword, onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase/config';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../lib/firebase/config';
+import AuthGuard from '../components/AuthGuard';
+import { Eye, EyeOff } from 'lucide-react'; // Add this import
 
-export default function LoginPage() {
+function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Add this state
   const router = useRouter();
-
-  // Check if user is already logged in
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        router.push('/dashboard');
-      }
-    });
-
-    return unsubscribe;
-  }, [router]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,8 +20,32 @@ export default function LoginPage() {
     setError('');
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push('/dashboard');
+      const adminAuthRef = collection(db, 'admin_auth');
+      const q = query(
+        adminAuthRef,
+        where('email', '==', email),
+        where('password', '==', password)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = { id: userDoc.id, ...userDoc.data() };
+        
+        const sessionData = {
+          id: userData.id,
+          email: userData.email,
+          loginTime: new Date().toISOString()
+        };
+        
+        localStorage.setItem('adminToken', JSON.stringify(sessionData));
+        
+        // Force redirect after successful login
+        window.location.href = '/dashboard';
+      } else {
+        setError('Invalid email or password. Please try again.');
+      }
     } catch (error) {
       setError('Invalid email or password. Please try again.');
       console.error('Login error:', error);
@@ -41,13 +57,10 @@ export default function LoginPage() {
     <div className="min-h-screen flex">
       {/* Left Image Section */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 relative overflow-hidden">
-        {/* Background Image/Illustration */}
         <div className="absolute inset-0 bg-black/20"></div>
         
-        {/* Construction/Car Booking Themed Image */}
         <div className="relative z-10 flex flex-col justify-center items-center p-12 text-white">
           <div className="w-full max-w-md">
-            {/* You can replace this with an actual image */}
             <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8 mb-8">
               <div className="w-16 h-16 bg-yellow-400 rounded-xl flex items-center justify-center mb-6 mx-auto">
                 <svg className="w-8 h-8 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,7 +73,6 @@ export default function LoginPage() {
               </p>
             </div>
             
-            {/* Features List */}
             <div className="space-y-4">
               <div className="flex items-center space-x-3">
                 <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
@@ -82,7 +94,6 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Decorative Elements */}
         <div className="absolute top-10 right-10 w-20 h-20 bg-white/5 rounded-full"></div>
         <div className="absolute bottom-10 left-10 w-32 h-32 bg-white/5 rounded-full"></div>
         <div className="absolute top-1/2 left-10 w-4 h-4 bg-yellow-400/60 rounded-full"></div>
@@ -91,7 +102,6 @@ export default function LoginPage() {
       {/* Right Login Form Section */}
       <div className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 bg-gray-50">
         <div className="max-w-md w-full space-y-8">
-          {/* Logo/Header */}
           <div className="text-center">
             <div className="mx-auto w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center mb-6">
               <svg className="w-8 h-8 text-yellow-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +116,6 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Login Form */}
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-5">
               <div>
@@ -130,21 +139,33 @@ export default function LoginPage() {
                 <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                   Password
                 </label>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    required
+                    className="appearance-none relative block w-full px-3 py-3 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors duration-200"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    onClick={() => setShowPassword(!showPassword)}
+                  >
+                    {showPassword ? (
+                      <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    ) : (
+                      <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600 transition-colors" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Remember me checkbox */}
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <input
@@ -156,12 +177,6 @@ export default function LoginPage() {
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700">
                   Remember me
                 </label>
-              </div>
-              
-              <div className="text-sm">
-                <a href="#" className="font-medium text-blue-600 hover:text-blue-500 transition-colors">
-                  Forgot password?
-                </a>
               </div>
             </div>
             
@@ -189,12 +204,19 @@ export default function LoginPage() {
             </div>
           </form>
 
-          {/* Footer */}
           <div className="text-center text-sm text-gray-500">
             <p>© 2025 Depart Admin Panel. All rights reserved.</p>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <AuthGuard requireAuth={false}>
+      <LoginPageContent />
+    </AuthGuard>
   );
 }

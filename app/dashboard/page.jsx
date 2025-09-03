@@ -1,8 +1,9 @@
-'use client';
-import { useState, useEffect } from 'react';
-import { useAuth } from '../lib/hooks/useAuth';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { db } from '../lib/firebase/config';
+"use client";
+import { useState, useEffect } from "react";
+import { useRouter } from 'next/navigation';
+import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { db } from "../lib/firebase/config";
+import AuthGuard from '../components/AuthGuard';
 import {
   Card,
   CardContent,
@@ -40,12 +41,13 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  FileText
-} from 'lucide-react';
+  FileText,
+  LogOut,
+} from "lucide-react";
 
-
-export default function Dashboard() {
-  const { user } = useAuth();
+function DashboardContent() {
+  const router = useRouter();
+  const [user, setUser] = useState(null);
   const [stats, setStats] = useState({
     totalClients: 0,
     totalDrivers: 0,
@@ -67,21 +69,38 @@ export default function Dashboard() {
   const [recentBookings, setRecentBookings] = useState([]);
   const [loading, setLoading] = useState(true);
 
-
+  // Get user from localStorage once component mounts
   useEffect(() => {
-    fetchDashboardData();
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+      try {
+        const userData = JSON.parse(token);
+        setUser(userData);
+        // Start fetching dashboard data
+        fetchDashboardData();
+      } catch (error) {
+        console.error('Invalid token:', error);
+        setLoading(false);
+      }
+    } else {
+      setLoading(false);
+    }
   }, []);
 
+  const handleLogout = () => {
+    localStorage.removeItem('adminToken');
+    window.location.href = '/login';
+  };
 
   // Helper function to determine KYC display status
   const getKYCDisplayStatus = (kycApproved, kycStatus, documentCount) => {
-    if (typeof kycApproved === 'boolean') {
-      return kycApproved ? 'verified' : 'pending';
+    if (typeof kycApproved === "boolean") {
+      return kycApproved ? "verified" : "pending";
     }
-    if (documentCount > 0 && (!kycStatus || kycStatus === 'not-submitted')) {
-      return 'submitted';
+    if (documentCount > 0 && (!kycStatus || kycStatus === "not-submitted")) {
+      return "submitted";
     }
-    return kycStatus || 'not-submitted';
+    return kycStatus || "not-submitted";
   };
 
   // Fetch bookings data from Firestore
@@ -89,40 +108,44 @@ export default function Dashboard() {
     try {
       // Fetch all bookings from the 'bookings' collection
       const bookingsQuery = query(
-        collection(db, 'bookings'),
-        orderBy('createdAt', 'desc')
+        collection(db, "bookings"),
+        orderBy("createdAt", "desc")
       );
       const bookingsSnapshot = await getDocs(bookingsQuery);
-      const bookingsData = bookingsSnapshot.docs.map(doc => ({
+      const bookingsData = bookingsSnapshot.docs.map((doc) => ({
         id: doc.id,
-        ...doc.data()
+        ...doc.data(),
       }));
 
       // Calculate booking statistics
       const activeBookings = bookingsData.filter(
-        booking => booking.status === 'active' || 
-                  booking.status === 'in-progress' || 
-                  booking.status === 'ongoing' ||
-                  booking.status === 'accepted'
+        (booking) =>
+          booking.status === "active" ||
+          booking.status === "in-progress" ||
+          booking.status === "ongoing" ||
+          booking.status === "accepted"
       ).length;
 
       const completedBookings = bookingsData.filter(
-        booking => booking.status === 'completed'
+        (booking) => booking.status === "completed"
       ).length;
 
       const cancelledBookings = bookingsData.filter(
-        booking => booking.status === 'cancelled'
+        (booking) => booking.status === "cancelled"
       ).length;
 
       const pendingBookings = bookingsData.filter(
-        booking => booking.status === 'pending' || 
-                  booking.status === 'requested'
+        (booking) =>
+          booking.status === "pending" || booking.status === "requested"
       ).length;
 
       // Calculate total revenue from completed bookings
       const totalRevenue = bookingsData
-        .filter(booking => booking.status === 'completed')
-        .reduce((sum, booking) => sum + (booking.fare || booking.amount || 0), 0);
+        .filter((booking) => booking.status === "completed")
+        .reduce(
+          (sum, booking) => sum + (booking.fare || booking.amount || 0),
+          0
+        );
 
       // Get recent bookings for activity feed
       const recentBookings = bookingsData.slice(0, 5);
@@ -134,11 +157,10 @@ export default function Dashboard() {
         pendingBookings,
         totalRevenue,
         recentBookings,
-        totalBookings: bookingsData.length
+        totalBookings: bookingsData.length,
       };
-
     } catch (error) {
-      console.error('Error fetching bookings data:', error);
+      console.error("Error fetching bookings data:", error);
       return {
         activeBookings: 0,
         completedBookings: 0,
@@ -146,25 +168,29 @@ export default function Dashboard() {
         pendingBookings: 0,
         totalRevenue: 0,
         recentBookings: [],
-        totalBookings: 0
+        totalBookings: 0,
       };
     }
   };
 
   // Generate weekly revenue data from bookings
   const generateWeeklyRevenueData = (bookings) => {
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const weeklyStats = days.map(day => ({ day, revenue: 0, bookings: 0 }));
+    const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const weeklyStats = days.map((day) => ({ day, revenue: 0, bookings: 0 }));
 
     // Get current week's bookings
     const now = new Date();
     const weekStart = new Date(now.setDate(now.getDate() - now.getDay() + 1));
 
-    bookings.forEach(booking => {
-      if (booking.createdAt && booking.status === 'completed') {
-        const bookingDate = booking.createdAt.toDate ? booking.createdAt.toDate() : new Date(booking.createdAt);
-        const daysDiff = Math.floor((bookingDate - weekStart) / (1000 * 60 * 60 * 24));
-        
+    bookings.forEach((booking) => {
+      if (booking.createdAt && booking.status === "completed") {
+        const bookingDate = booking.createdAt.toDate
+          ? booking.createdAt.toDate()
+          : new Date(booking.createdAt);
+        const daysDiff = Math.floor(
+          (bookingDate - weekStart) / (1000 * 60 * 60 * 24)
+        );
+
         if (daysDiff >= 0 && daysDiff < 7) {
           weeklyStats[daysDiff].revenue += booking.fare || booking.amount || 0;
           weeklyStats[daysDiff].bookings += 1;
@@ -175,44 +201,61 @@ export default function Dashboard() {
     return weeklyStats;
   };
 
-
+  // Main function to fetch all dashboard data
   const fetchDashboardData = async () => {
     try {
+      setLoading(true);
+      
       // Fetch all users from the 'users' collection
-      const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+      const usersQuery = query(
+        collection(db, "users"),
+        orderBy("createdAt", "desc")
+      );
       const usersSnapshot = await getDocs(usersQuery);
-      const usersData = usersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
+      const usersData = usersSnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
       // Separate drivers and clients based on role
-      const driversData = usersData.filter(user => user.role === 'driver');
-      const clientsData = usersData.filter(user => user.role === 'client' || user.role === 'customer' || !user.role);
+      const driversData = usersData.filter((user) => user.role === "driver");
+      const clientsData = usersData.filter(
+        (user) =>
+          user.role === "client" || user.role === "customer" || !user.role
+      );
 
       // Fetch bookings data
       const bookingsStats = await fetchBookingsData();
-
 
       // Fetch KYC documents and vehicles for each driver
       const driversWithDetails = await Promise.all(
         driversData.map(async (driver) => {
           try {
             // 1. Fetch KYC documents from 'kyc' subcollection
-            const kycQuery = collection(db, 'users', driver.id, 'kyc');
+            const kycQuery = collection(db, "users", driver.id, "kyc");
             const kycSnapshot = await getDocs(kycQuery);
             let kycDocuments = {};
-            kycSnapshot.forEach(doc => {
+            kycSnapshot.forEach((doc) => {
               const docData = doc.data();
               kycDocuments[doc.id] = {
-                url: docData.url || docData.photoUrl || docData.fileUrl || docData.documentUrl,
+                url:
+                  docData.url ||
+                  docData.photoUrl ||
+                  docData.fileUrl ||
+                  docData.documentUrl,
                 uploadedAt: docData.uploadedAt || docData.createdAt,
                 type: docData.type || doc.id,
-                ...docData
+                ...docData,
               };
             });
 
-
             // 2. Fetch vehicle from 'vehicles' subcollection
-            const vehiclesQuery = collection(db, 'users', driver.id, 'vehicles');
+            const vehiclesQuery = collection(
+              db,
+              "users",
+              driver.id,
+              "vehicles"
+            );
             const vehiclesSnapshot = await getDocs(vehiclesQuery);
             let vehicle = null;
             if (!vehiclesSnapshot.empty) {
@@ -220,30 +263,33 @@ export default function Dashboard() {
               vehicle = { id: vehicleDoc.id, ...vehicleDoc.data() };
             }
 
-
             return {
               ...driver,
               kycDocuments,
               vehicle,
-              kycDocumentCount: Object.keys(kycDocuments).length
+              kycDocumentCount: Object.keys(kycDocuments).length,
             };
           } catch (error) {
-            console.error(`Error fetching details for driver ${driver.id}:`, error);
+            console.error(
+              `Error fetching details for driver ${driver.id}:`,
+              error
+            );
             return {
               ...driver,
               kycDocuments: {},
               vehicle: null,
-              kycDocumentCount: 0
+              kycDocumentCount: 0,
             };
           }
         })
       );
 
-
       // Calculate statistics based on your actual data structure
       const totalDrivers = driversWithDetails.length;
-      const activeDrivers = driversWithDetails.filter(d => d.is_active !== false).length;
-      
+      const activeDrivers = driversWithDetails.filter(
+        (d) => d.is_active !== false
+      ).length;
+
       // KYC Statistics using the same logic as your drivers table
       let kycVerified = 0;
       let kycPending = 0;
@@ -251,21 +297,24 @@ export default function Dashboard() {
       let kycSubmitted = 0;
       let kycNotSubmitted = 0;
 
+      driversWithDetails.forEach((driver) => {
+        const kycStatus = getKYCDisplayStatus(
+          driver.kyc_approved,
+          driver.kycStatus,
+          driver.kycDocumentCount
+        );
 
-      driversWithDetails.forEach(driver => {
-        const kycStatus = getKYCDisplayStatus(driver.kyc_approved, driver.kycStatus, driver.kycDocumentCount);
-        
         switch (kycStatus) {
-          case 'verified':
+          case "verified":
             kycVerified++;
             break;
-          case 'pending':
+          case "pending":
             kycPending++;
             break;
-          case 'rejected':
+          case "rejected":
             kycRejected++;
             break;
-          case 'submitted':
+          case "submitted":
             kycSubmitted++;
             break;
           default:
@@ -273,12 +322,16 @@ export default function Dashboard() {
         }
       });
 
-
       // Vehicle Statistics
-      const vehicleActive = driversWithDetails.filter(d => d.vehicleActive !== false && d.vehicle).length;
-      const vehicleInactive = driversWithDetails.filter(d => d.vehicleActive === false && d.vehicle).length;
-      const vehiclesWithoutInfo = driversWithDetails.filter(d => !d.vehicle).length;
-
+      const vehicleActive = driversWithDetails.filter(
+        (d) => d.vehicleActive !== false && d.vehicle
+      ).length;
+      const vehicleInactive = driversWithDetails.filter(
+        (d) => d.vehicleActive === false && d.vehicle
+      ).length;
+      const vehiclesWithoutInfo = driversWithDetails.filter(
+        (d) => !d.vehicle
+      ).length;
 
       // Update stats with real bookings data
       setStats({
@@ -300,46 +353,64 @@ export default function Dashboard() {
       // Set recent bookings for activity feed
       setRecentBookings(bookingsStats.recentBookings);
 
-
-      // Generate monthly registration data (you can make this dynamic based on actual creation dates)
-      const monthlyData = generateMonthlyRegistrationData(driversWithDetails, clientsData);
+      // Generate monthly registration data
+      const monthlyData = generateMonthlyRegistrationData(
+        driversWithDetails,
+        clientsData
+      );
       setChartData(monthlyData);
-
 
       // Updated pie chart data for KYC status distribution
       setPieData([
-        { name: 'Verified', value: kycVerified, color: '#10b981' },
-        { name: 'Pending', value: kycPending, color: '#f59e0b' },
-        { name: 'Rejected', value: kycRejected, color: '#ef4444' },
-        { name: 'Submitted', value: kycSubmitted, color: '#3b82f6' },
-        { name: 'Not Submitted', value: kycNotSubmitted, color: '#6b7280' },
+        { name: "Verified", value: kycVerified, color: "#10b981" },
+        { name: "Pending", value: kycPending, color: "#f59e0b" },
+        { name: "Rejected", value: kycRejected, color: "#ef4444" },
+        { name: "Submitted", value: kycSubmitted, color: "#3b82f6" },
+        { name: "Not Submitted", value: kycNotSubmitted, color: "#6b7280" },
       ]);
 
-
       // Generate dynamic revenue data based on actual bookings
-      const weeklyRevenueData = generateWeeklyRevenueData(bookingsStats.recentBookings);
+      const weeklyRevenueData = generateWeeklyRevenueData(
+        bookingsStats.recentBookings
+      );
       setRevenueData(weeklyRevenueData);
-
-
     } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+      console.error("Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
-
 
   // Generate monthly registration data based on creation dates
   const generateMonthlyRegistrationData = (drivers, clients) => {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
     const currentYear = new Date().getFullYear();
-    
-    const monthlyStats = months.map(month => ({ month, drivers: 0, clients: 0 }));
 
+    const monthlyStats = months.map((month) => ({
+      month,
+      drivers: 0,
+      clients: 0,
+    }));
 
     // Count drivers by month
-    drivers.forEach(driver => {
+    drivers.forEach((driver) => {
       if (driver.createdAt) {
-        const date = driver.createdAt.toDate ? driver.createdAt.toDate() : new Date(driver.createdAt);
+        const date = driver.createdAt.toDate
+          ? driver.createdAt.toDate()
+          : new Date(driver.createdAt);
         if (date.getFullYear() === currentYear) {
           const monthIndex = date.getMonth();
           monthlyStats[monthIndex].drivers++;
@@ -347,11 +418,12 @@ export default function Dashboard() {
       }
     });
 
-
     // Count clients by month
-    clients.forEach(client => {
+    clients.forEach((client) => {
       if (client.createdAt) {
-        const date = client.createdAt.toDate ? client.createdAt.toDate() : new Date(client.createdAt);
+        const date = client.createdAt.toDate
+          ? client.createdAt.toDate()
+          : new Date(client.createdAt);
         if (date.getFullYear() === currentYear) {
           const monthIndex = date.getMonth();
           monthlyStats[monthIndex].clients++;
@@ -359,14 +431,12 @@ export default function Dashboard() {
       }
     });
 
-
     return monthlyStats.slice(0, 6); // Show last 6 months
   };
 
-
-  if (loading) {
+  if (loading || !user) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading dashboard...</p>
@@ -375,18 +445,19 @@ export default function Dashboard() {
     );
   }
 
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">
-          Welcome back, {user?.email}!
-        </h1>
-        <p className="text-gray-600">
-          Here's what's happening with your car booking platform today.
-        </p>
+    <div className="space-y-6 p-6">
+      {/* Header with Logout */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">
+            Welcome back, {user?.email}!
+          </h1>
+          <p className="text-gray-600">
+            Here's what's happening with your car booking platform today.
+          </p>
+        </div>
       </div>
-
 
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -396,7 +467,9 @@ export default function Dashboard() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{stats.totalClients}</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {stats.totalClients}
+            </div>
             <p className="text-xs text-muted-foreground flex items-center">
               <TrendingUp className="w-3 h-3 mr-1" />
               Registered users
@@ -404,20 +477,22 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Drivers</CardTitle>
             <Car className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.totalDrivers}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {stats.totalDrivers}
+            </div>
             <p className="text-xs text-muted-foreground flex items-center">
-              <span className="text-green-600">{stats.activeDrivers} active</span>
+              <span className="text-green-600">
+                {stats.activeDrivers} active
+              </span>
             </p>
           </CardContent>
         </Card>
-
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -425,7 +500,9 @@ export default function Dashboard() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">${stats.totalRevenue.toLocaleString()}</div>
+            <div className="text-2xl font-bold text-purple-600">
+              ${stats.totalRevenue.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground flex items-center">
               <TrendingUp className="w-3 h-3 mr-1" />
               From completed bookings
@@ -433,14 +510,17 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Bookings</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Active Bookings
+            </CardTitle>
             <Calendar className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.activeBookings}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {stats.activeBookings}
+            </div>
             <p className="text-xs text-muted-foreground flex items-center">
               <TrendingDown className="w-3 h-3 mr-1" />
               Current active trips
@@ -449,20 +529,20 @@ export default function Dashboard() {
         </Card>
       </div>
 
-
-      {/* Driver Management Stats - Updated with Real Data */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+      {/* Driver Management Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">KYC Verified</CardTitle>
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.kycVerified}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {stats.kycVerified}
+            </div>
             <p className="text-xs text-muted-foreground">Approved drivers</p>
           </CardContent>
         </Card>
-
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -470,11 +550,12 @@ export default function Dashboard() {
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{stats.kycPending}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {stats.kycPending}
+            </div>
             <p className="text-xs text-muted-foreground">Awaiting review</p>
           </CardContent>
         </Card>
-
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -482,46 +563,53 @@ export default function Dashboard() {
             <XCircle className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{stats.kycRejected}</div>
+            <div className="text-2xl font-bold text-red-600">
+              {stats.kycRejected}
+            </div>
             <p className="text-xs text-muted-foreground">Need resubmission</p>
           </CardContent>
         </Card>
 
-
-
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Vehicles</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Active Vehicles
+            </CardTitle>
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.vehicleActive}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {stats.vehicleActive}
+            </div>
             <p className="text-xs text-muted-foreground">Vehicles in service</p>
           </CardContent>
         </Card>
 
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive Vehicles</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Inactive Vehicles
+            </CardTitle>
             <XCircle className="h-4 w-4 text-gray-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-gray-600">{stats.vehicleInactive}</div>
+            <div className="text-2xl font-bold text-gray-600">
+              {stats.vehicleInactive}
+            </div>
             <p className="text-xs text-muted-foreground">Vehicles offline</p>
           </CardContent>
         </Card>
       </div>
 
-
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Registration Trends - Updated with Real Data */}
+        {/* Registration Trends */}
         <Card>
           <CardHeader>
             <CardTitle>Registration Trends</CardTitle>
-            <CardDescription>Driver and client registrations over time</CardDescription>
+            <CardDescription>
+              Driver and client registrations over time
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer
@@ -550,12 +638,13 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-
-        {/* KYC Status Distribution - Updated with Real Data */}
+        {/* KYC Status Distribution */}
         <Card>
           <CardHeader>
             <CardTitle>KYC Status Distribution</CardTitle>
-            <CardDescription>Current driver verification status breakdown</CardDescription>
+            <CardDescription>
+              Current driver verification status breakdown
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <ChartContainer
@@ -591,12 +680,13 @@ export default function Dashboard() {
         </Card>
       </div>
 
-
       {/* Revenue Chart */}
       <Card>
         <CardHeader>
           <CardTitle>Weekly Revenue & Bookings</CardTitle>
-          <CardDescription>Revenue and booking trends for the past week</CardDescription>
+          <CardDescription>
+            Revenue and booking trends for the past week
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ChartContainer
@@ -636,8 +726,7 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-
-      {/* Recent Activity - Enhanced with Real Booking Data */}
+      {/* Recent Activity */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Booking Activity</CardTitle>
@@ -647,26 +736,40 @@ export default function Dashboard() {
             {recentBookings.length > 0 ? (
               recentBookings.map((booking, index) => (
                 <div key={booking.id} className="flex items-center space-x-4">
-                  <div className={`w-2 h-2 rounded-full ${
-                    booking.status === 'completed' ? 'bg-green-500' :
-                    booking.status === 'active' || booking.status === 'in-progress' ? 'bg-blue-500' :
-                    booking.status === 'cancelled' ? 'bg-red-500' : 'bg-yellow-500'
-                  }`}></div>
+                  <div
+                    className={`w-2 h-2 rounded-full ${
+                      booking.status === "completed"
+                        ? "bg-green-500"
+                        : booking.status === "active" ||
+                          booking.status === "in-progress"
+                        ? "bg-blue-500"
+                        : booking.status === "cancelled"
+                        ? "bg-red-500"
+                        : "bg-yellow-500"
+                    }`}
+                  ></div>
                   <div className="flex-1">
                     <p className="text-sm font-medium">
-                      Booking {booking.status === 'completed' ? 'completed' : 
-                              booking.status === 'active' ? 'in progress' : 
-                              booking.status}
+                      Booking{" "}
+                      {booking.status === "completed"
+                        ? "completed"
+                        : booking.status === "active"
+                        ? "in progress"
+                        : booking.status}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {booking.pickupLocation || 'Pickup location'} → {booking.dropoffLocation || 'Destination'}
+                      {booking.pickupLocation || "Pickup location"} →{" "}
+                      {booking.dropoffLocation || "Destination"}
                       {booking.fare && ` • $${booking.fare}`}
                     </p>
                   </div>
                   <div className="text-xs text-gray-400">
-                    {booking.createdAt && new Date(
-                      booking.createdAt.toDate ? booking.createdAt.toDate() : booking.createdAt
-                    ).toLocaleDateString()}
+                    {booking.createdAt &&
+                      new Date(
+                        booking.createdAt.toDate
+                          ? booking.createdAt.toDate()
+                          : booking.createdAt
+                      ).toLocaleDateString()}
                   </div>
                 </div>
               ))
@@ -674,26 +777,42 @@ export default function Dashboard() {
               <>
                 <div className="flex items-center space-x-4">
                   <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">System Status</p>
+                    <p className="text-xs text-gray-500">
+                      Platform is running smoothly
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">KYC verification completed</p>
-                    <p className="text-xs text-gray-500">{stats.kycVerified} drivers currently verified</p>
+                    <p className="text-sm font-medium">
+                      KYC verification completed
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {stats.kycVerified} drivers currently verified
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="w-2 h-2 bg-purple-500 rounded-full"></div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">Vehicle status updated</p>
-                    <p className="text-xs text-gray-500">{stats.vehicleActive} vehicles are currently active</p>
+                    <p className="text-sm font-medium">
+                      Vehicle status updated
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {stats.vehicleActive} vehicles are currently active
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
                   <div className="flex-1">
                     <p className="text-sm font-medium">Platform status</p>
-                    <p className="text-xs text-gray-500">{stats.activeDrivers} active drivers ready for bookings</p>
+                    <p className="text-xs text-gray-500">
+                      {stats.activeDrivers} active drivers ready for bookings
+                    </p>
                   </div>
                 </div>
               </>
@@ -702,5 +821,13 @@ export default function Dashboard() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <AuthGuard requireAuth={true}>
+      <DashboardContent />
+    </AuthGuard>
   );
 }

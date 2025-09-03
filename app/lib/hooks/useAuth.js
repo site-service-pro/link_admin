@@ -1,31 +1,63 @@
 'use client';
 import { useState, useEffect, createContext, useContext } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  signOut as firebaseSignOut 
-} from 'firebase/auth';
-import { auth } from '../firebase/config';
+import { collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../firebase/config';
 
-// Create context with default value
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (mounted) {
+      const token = localStorage.getItem('adminToken');
+      
+      if (token) {
+        try {
+          const userData = JSON.parse(token);
+          setUser(userData);
+        } catch (error) {
+          localStorage.removeItem('adminToken');
+        }
+      }
+      setLoading(false);
+    }
+  }, [mounted]);
 
   const signIn = async (email, password) => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const adminAuthRef = collection(db, 'admin_auth');
+      const q = query(
+        adminAuthRef,
+        where('email', '==', email),
+        where('password', '==', password)
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        const userDoc = querySnapshot.docs[0];
+        const userData = { id: userDoc.id, ...userDoc.data() };
+        
+        const sessionData = {
+          id: userData.id,
+          email: userData.email,
+          loginTime: new Date().toISOString()
+        };
+        
+        localStorage.setItem('adminToken', JSON.stringify(sessionData));
+        setUser(sessionData);
+        
+        return userData;
+      } else {
+        throw new Error('Invalid credentials');
+      }
     } catch (error) {
       throw error;
     }
@@ -33,7 +65,8 @@ export function AuthProvider({ children }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      localStorage.removeItem('adminToken');
+      setUser(null);
     } catch (error) {
       throw error;
     }
@@ -41,7 +74,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
-    loading,
+    loading: loading || !mounted,
     signIn,
     signOut
   };

@@ -92,7 +92,7 @@ export function AppSidebar() {
             <Car className="size-4 text-blue-600" /> {/* Reduced icon size from size-5 to size-4 */}
           </div>
           <div className="flex flex-col gap-0 text-gray-900 leading-tight"> {/* Reduced gap from gap-1 to gap-0, changed leading-none to leading-tight */}
-            <span className="font-bold text-base">Depart</span> {/* Reduced from text-lg to text-base */}
+            <span className="font-bold text-base">Link</span> {/* Reduced from text-lg to text-base */}
             <span className="text-xs text-sidebar-foreground/80">Admin Panel</span> {/* Reduced from text-sm to text-xs */}
           </div>
         </div>

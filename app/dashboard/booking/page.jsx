@@ -253,41 +253,42 @@ export default function BookingsPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto p-2 sm:p-4 lg:p-6 space-y-4 sm:space-y-6">
+      {/* Header Section - Responsive */}
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold">Bookings Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold">Bookings Management</h1>
           <p className="text-gray-600 mt-1">Manage all ride bookings in the system</p>
         </div>
         <button
           onClick={fetchBookings}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors w-full sm:w-auto"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh Data
         </button>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Summary Stats - Responsive Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-            <Car className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Bookings</CardTitle>
+            <Car className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{bookings.length}</div>
+            <div className="text-lg sm:text-2xl font-bold text-blue-600">{bookings.length}</div>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Requested</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-medium">Requested</CardTitle>
+            <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
+            <div className="text-lg sm:text-2xl font-bold text-yellow-600">
               {bookings.filter(b => b.status === 'requested').length}
             </div>
           </CardContent>
@@ -295,11 +296,11 @@ export default function BookingsPage() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed</CardTitle>
-            <User className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-medium">Completed</CardTitle>
+            <User className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
+            <div className="text-lg sm:text-2xl font-bold text-green-600">
               {bookings.filter(b => b.status === 'completed').length}
             </div>
           </CardContent>
@@ -307,26 +308,26 @@ export default function BookingsPage() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Distance</CardTitle>
-            <Navigation className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-xs sm:text-sm font-medium">Total Distance</CardTitle>
+            <Navigation className="h-3 w-3 sm:h-4 sm:w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">
+            <div className="text-lg sm:text-2xl font-bold text-purple-600">
               {bookings.reduce((sum, b) => sum + (parseFloat(b.tripKm) || 0), 0).toFixed(1)} km
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Bookings Table */}
+      {/* Bookings Table - Responsive */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
-            <span>All Bookings ({filteredBookings.length})</span>
+          <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <span className="text-lg sm:text-xl">All Bookings ({filteredBookings.length})</span>
             {(tableFilters.driverId || tableFilters.riderId || tableFilters.status || tableFilters.pickupLabel || tableFilters.dropoffLabel) && (
               <button
                 onClick={clearAllFilters}
-                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800"
+                className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 self-start sm:self-center"
               >
                 <Filter className="w-4 h-4" />
                 Clear Filters
@@ -337,28 +338,28 @@ export default function BookingsPage() {
             Complete list of ride bookings with filtering capabilities
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-2 sm:p-6">
           <div className="rounded-md border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[180px]">
+                  <TableHead className="w-[120px] sm:w-[180px]">
                     <div className="flex items-center space-x-2">
                       <button
                         onClick={() => handleSort('createdAt')}
                         className="flex items-center space-x-1 text-left hover:text-blue-600"
                       >
-                        <span>Created At</span>
+                        <span className="text-xs sm:text-sm">Created At</span>
                         <ArrowUpDown className="w-3 h-3" />
                       </button>
                     </div>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="min-w-[120px]">
                     <div className="flex items-center space-x-2">
-                      <span>Driver ID</span>
+                      <span className="text-xs sm:text-sm">Driver ID</span>
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-2 hidden sm:block">
                       <input
                         type="text"
                         placeholder="Search driver..."
@@ -369,11 +370,11 @@ export default function BookingsPage() {
                     </div>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="min-w-[120px]">
                     <div className="flex items-center space-x-2">
-                      <span>Rider ID</span>
+                      <span className="text-xs sm:text-sm">Rider ID</span>
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-2 hidden sm:block">
                       <input
                         type="text"
                         placeholder="Search rider..."
@@ -384,9 +385,9 @@ export default function BookingsPage() {
                     </div>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="min-w-[140px] hidden md:table-cell">
                     <div className="flex items-center space-x-2">
-                      <span>Pickup Location</span>
+                      <span className="text-xs sm:text-sm">Pickup Location</span>
                     </div>
                     <div className="mt-2">
                       <input
@@ -399,9 +400,9 @@ export default function BookingsPage() {
                     </div>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="min-w-[140px] hidden md:table-cell">
                     <div className="flex items-center space-x-2">
-                      <span>Dropoff Location</span>
+                      <span className="text-xs sm:text-sm">Dropoff Location</span>
                     </div>
                     <div className="mt-2">
                       <input
@@ -414,31 +415,31 @@ export default function BookingsPage() {
                     </div>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="hidden lg:table-cell">
                     <button
                       onClick={() => handleSort('tripKm')}
                       className="flex items-center space-x-1 text-left hover:text-blue-600"
                     >
-                      <span>Distance</span>
+                      <span className="text-xs sm:text-sm">Distance</span>
                       <ArrowUpDown className="w-3 h-3" />
                     </button>
                   </TableHead>
                   
-                  <TableHead>
+                  <TableHead className="hidden lg:table-cell">
                     <button
                       onClick={() => handleSort('farePerKm')}
                       className="flex items-center space-x-1 text-left hover:text-blue-600"
                     >
-                      <span>Fare/Km</span>
+                      <span className="text-xs sm:text-sm">Fare/Km</span>
                       <ArrowUpDown className="w-3 h-3" />
                     </button>
                   </TableHead>
                   
                   <TableHead>
                     <div className="flex items-center space-x-2">
-                      <span>Status</span>
+                      <span className="text-xs sm:text-sm">Status</span>
                     </div>
-                    <div className="mt-2">
+                    <div className="mt-2 hidden sm:block">
                       <select
                         value={tableFilters.status}
                         onChange={(e) => handleTableFilterChange('status', e.target.value)}
@@ -454,82 +455,84 @@ export default function BookingsPage() {
                     </div>
                   </TableHead>
                   
-                  <TableHead className="text-right">Actions</TableHead>
+                  <TableHead className="text-right w-[60px]">
+                    <span className="text-xs sm:text-sm">Actions</span>
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredBookings.map((booking) => (
                   <TableRow key={booking.id} className="hover:bg-muted/50">
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">
+                    <TableCell className="p-2 sm:p-4">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <Calendar className="h-3 w-3 sm:h-4 sm:w-4 text-gray-400" />
+                        <span className="text-xs sm:text-sm">
                           {formatDate(booking.createdAt)}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-blue-400" />
-                        <span className="text-sm font-mono">
-                          {booking.driverId ? booking.driverId.substring(0, 8) + '...' : 'N/A'}
+                    <TableCell className="p-2 sm:p-4">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-blue-400" />
+                        <span className="text-xs sm:text-sm font-mono">
+                          {booking.driverId ? booking.driverId.substring(0, 6) + '...' : 'N/A'}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-green-400" />
-                        <span className="text-sm font-mono">
-                          {booking.riderId ? booking.riderId.substring(0, 8) + '...' : 'N/A'}
+                    <TableCell className="p-2 sm:p-4">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <User className="h-3 w-3 sm:h-4 sm:w-4 text-green-400" />
+                        <span className="text-xs sm:text-sm font-mono">
+                          {booking.riderId ? booking.riderId.substring(0, 6) + '...' : 'N/A'}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-green-500" />
-                        <span className="text-sm max-w-[200px] truncate">
+                    <TableCell className="p-2 sm:p-4 hidden md:table-cell">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" />
+                        <span className="text-xs sm:text-sm max-w-[120px] sm:max-w-[200px] truncate">
                           {booking.pickup?.label || 'N/A'}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 text-red-500" />
-                        <span className="text-sm max-w-[200px] truncate">
+                    <TableCell className="p-2 sm:p-4 hidden md:table-cell">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <MapPin className="h-3 w-3 sm:h-4 sm:w-4 text-red-500" />
+                        <span className="text-xs sm:text-sm max-w-[120px] sm:max-w-[200px] truncate">
                           {booking.dropoff?.label || 'N/A'}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Navigation className="h-4 w-4 text-purple-400" />
-                        <span className="text-sm font-medium">
+                    <TableCell className="p-2 sm:p-4 hidden lg:table-cell">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <Navigation className="h-3 w-3 sm:h-4 sm:w-4 text-purple-400" />
+                        <span className="text-xs sm:text-sm font-medium">
                           {booking.tripKm ? `${parseFloat(booking.tripKm).toFixed(1)} km` : 'N/A'}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="h-4 w-4 text-yellow-500" />
-                        <span className="text-sm font-medium">
+                    <TableCell className="p-2 sm:p-4 hidden lg:table-cell">
+                      <div className="flex items-center gap-1 sm:gap-2">
+                        <DollarSign className="h-3 w-3 sm:h-4 sm:w-4 text-yellow-500" />
+                        <span className="text-xs sm:text-sm font-medium">
                           {formatCurrency(booking.dropoff?.farePerKm)}
                         </span>
                       </div>
                     </TableCell>
                     
-                    <TableCell>
-                      <span className={`inline-block px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(booking.status)}`}>
+                    <TableCell className="p-2 sm:p-4">
+                      <span className={`inline-block px-1 sm:px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(booking.status)}`}>
                         {booking.status || 'Unknown'}
                       </span>
                     </TableCell>
                     
-                    <TableCell className="text-right">
+                    <TableCell className="text-right p-2 sm:p-4">
                       <ActionsDropdown booking={booking} />
                     </TableCell>
                   </TableRow>
@@ -540,8 +543,8 @@ export default function BookingsPage() {
           
           {filteredBookings.length === 0 && !loading && (
             <div className="text-center py-8">
-              <Car className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-500 mb-2">
+              <Car className="w-8 h-8 sm:w-12 sm:h-12 text-gray-300 mx-auto mb-3" />
+              <p className="text-gray-500 mb-2 text-sm sm:text-base">
                 {bookings.length === 0 ? 'No bookings found in the database' : 'No bookings found matching your filters'}
               </p>
               {(tableFilters.driverId || tableFilters.riderId || tableFilters.status || tableFilters.pickupLabel || tableFilters.dropoffLabel) && (
@@ -557,31 +560,80 @@ export default function BookingsPage() {
         </CardContent>
       </Card>
 
-      {/* Booking Details Modal */}
+      {/* Mobile Filters Section - Show on small screens */}
+      <Card className="sm:hidden">
+        <CardHeader>
+          <CardTitle className="text-lg">Filters</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <input
+            type="text"
+            placeholder="Search driver..."
+            value={tableFilters.driverId}
+            onChange={(e) => handleTableFilterChange('driverId', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            placeholder="Search rider..."
+            value={tableFilters.riderId}
+            onChange={(e) => handleTableFilterChange('riderId', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            placeholder="Search pickup location..."
+            value={tableFilters.pickupLabel}
+            onChange={(e) => handleTableFilterChange('pickupLabel', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <input
+            type="text"
+            placeholder="Search dropoff location..."
+            value={tableFilters.dropoffLabel}
+            onChange={(e) => handleTableFilterChange('dropoffLabel', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          />
+          <select
+            value={tableFilters.status}
+            onChange={(e) => handleTableFilterChange('status', e.target.value)}
+            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="">All Status</option>
+            <option value="requested">Requested</option>
+            <option value="accepted">Accepted</option>
+            <option value="in-progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </CardContent>
+      </Card>
+
+      {/* Booking Details Modal - Responsive */}
       {showDetails && selectedBooking && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold">Booking Details</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4">
+          <div className="bg-white rounded-lg p-4 sm:p-6 max-w-full sm:max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4 sm:mb-6">
+              <h2 className="text-xl sm:text-2xl font-bold">Booking Details</h2>
               <button
                 onClick={() => setShowDetails(false)}
-                className="text-gray-500 hover:text-gray-700 text-2xl"
+                className="text-gray-500 hover:text-gray-700 text-xl sm:text-2xl"
               >
                 ✕
               </button>
             </div>
 
-            <div className="grid lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {/* Booking Info */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <Calendar className="w-4 h-4" />
                     Booking Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div><strong>Booking ID:</strong> {selectedBooking.id}</div>
+                  <div><strong>Booking ID:</strong> <span className="break-all">{selectedBooking.id}</span></div>
                   <div><strong>Created At:</strong> {formatDate(selectedBooking.createdAt)}</div>
                   <div><strong>Status:</strong> 
                     <span className={`ml-2 px-2 py-1 text-xs rounded-full ${getStatusColor(selectedBooking.status)}`}>
@@ -596,13 +648,13 @@ export default function BookingsPage() {
               {/* Pickup Location */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <MapPin className="w-4 h-4 text-green-500" />
                     Pickup Location
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div><strong>Address:</strong> {selectedBooking.pickup?.label || 'N/A'}</div>
+                  <div><strong>Address:</strong> <span className="break-words">{selectedBooking.pickup?.label || 'N/A'}</span></div>
                   <div><strong>Latitude:</strong> {selectedBooking.pickup?.lat || 'N/A'}</div>
                   <div><strong>Longitude:</strong> {selectedBooking.pickup?.lng || 'N/A'}</div>
                 </CardContent>
@@ -611,51 +663,51 @@ export default function BookingsPage() {
               {/* Dropoff Location */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <MapPin className="w-4 h-4 text-red-500" />
                     Dropoff Location
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div><strong>Address:</strong> {selectedBooking.dropoff?.label || 'N/A'}</div>
+                  <div><strong>Address:</strong> <span className="break-words">{selectedBooking.dropoff?.label || 'N/A'}</span></div>
                   <div><strong>Latitude:</strong> {selectedBooking.dropoff?.lat || 'N/A'}</div>
                   <div><strong>Longitude:</strong> {selectedBooking.dropoff?.lng || 'N/A'}</div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-6 mt-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mt-4 sm:mt-6">
               {/* Driver Details */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <User className="w-4 h-4 text-blue-500" />
                     Driver Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div><strong>Driver ID:</strong> {selectedBooking.driverId || 'N/A'}</div>
+                  <div><strong>Driver ID:</strong> <span className="break-all">{selectedBooking.driverId || 'N/A'}</span></div>
                 </CardContent>
               </Card>
 
               {/* Rider Details */}
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
+                  <CardTitle className="flex items-center gap-2 text-lg">
                     <User className="w-4 h-4 text-green-500" />
                     Rider Information
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
-                  <div><strong>Rider ID:</strong> {selectedBooking.riderId || 'N/A'}</div>
+                  <div><strong>Rider ID:</strong> <span className="break-all">{selectedBooking.riderId || 'N/A'}</span></div>
                 </CardContent>
               </Card>
             </div>
 
-            <div className="flex justify-end mt-6">
+            <div className="flex justify-end mt-4 sm:mt-6">
               <button
                 onClick={() => setShowDetails(false)}
-                className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                className="w-full sm:w-auto px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
                 Close
               </button>

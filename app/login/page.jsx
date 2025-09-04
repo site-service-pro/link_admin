@@ -67,7 +67,7 @@ function LoginPageContent() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                 </svg>
               </div>
-              <h2 className="text-2xl font-bold text-center mb-4">Depart Platform</h2>
+              <h2 className="text-2xl font-bold text-center mb-4">Link Platform</h2>
               <p className="text-center text-blue-100">
                 Manage your fleet, drivers, and bookings with our comprehensive admin dashboard.
               </p>
@@ -109,7 +109,7 @@ function LoginPageContent() {
               </svg>
             </div>
             <h2 className="text-3xl font-bold text-gray-900">
-              Sign in to Depart
+              Sign in to Link
             </h2>
             <p className="mt-2 text-sm text-gray-600">
               Your workspace for car booking management and analytics
@@ -205,7 +205,7 @@ function LoginPageContent() {
           </form>
 
           <div className="text-center text-sm text-gray-500">
-            <p>© 2025 Depart Admin Panel. All rights reserved.</p>
+            <p>© 2025 Link Admin Panel. All rights reserved.</p>
           </div>
         </div>
       </div>

@@ -11,7 +11,8 @@ import {
   Users,
   Activity,
   LogOut,
-  User
+  User,
+  icons
 } from "lucide-react";
 
 import {
@@ -49,8 +50,8 @@ const menuItems = [
     icon: Car,
   },
   {
-    title: "Payments",
-    url: "/dashboard/payments",
+    title: "Plans & Subscriptions",
+    url: "/dashboard/plans",
     icon: CreditCard,
   },
   {
@@ -58,14 +59,15 @@ const menuItems = [
     url: "/dashboard/booking", 
     icon: Activity,
   },
+  {
+    title: "Feedback",
+    url: "/dashboard/feedback",
+    icon: icons.MessageCircle,
+  },
 ];
 
 const settingsItems = [
-  {
-    title: "Settings",
-    url: "/dashboard/settings",
-    icon: Settings,
-  },
+ 
   
 ];
 
@@ -128,7 +130,6 @@ export function AppSidebar() {
 
         {/* Settings Section */}
         <SidebarGroup className="mt-6">
-          <SidebarGroupLabel className="px-4 text-sm font-medium text-muted-foreground">Tools</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {settingsItems.map((item) => {

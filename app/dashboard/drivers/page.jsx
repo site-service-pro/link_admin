@@ -4,7 +4,7 @@ import { collection, getDocs, doc, updateDoc, query, orderBy } from 'firebase/fi
 import { db } from '../../lib/firebase/config';
 import {
   Eye, Download, FileText, Car, CheckCircle, XCircle, Clock, User, MoreVertical, 
-  Filter, Search, ArrowUpDown
+  Filter, Search, ArrowUpDown, X, ZoomIn, ZoomOut
 } from 'lucide-react';
 import {
   Table,
@@ -21,12 +21,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 export default function DriversAdminPage() {
   const [drivers, setDrivers] = useState([]);
   const [filteredDrivers, setFilteredDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedDriver, setSelectedDriver] = useState(null);
   const [showDocuments, setShowDocuments] = useState(false);
+  
+  // Document viewer states - Updated for smaller modal
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [currentDocument, setCurrentDocument] = useState(null);
+  const [documentZoom, setDocumentZoom] = useState(1);
   
   // Table filtering states
   const [tableFilters, setTableFilters] = useState({
@@ -45,6 +51,87 @@ export default function DriversAdminPage() {
   useEffect(() => {
     applyTableFilters();
   }, [drivers, tableFilters, sortConfig]);
+
+  // Document viewer functions - Updated for smaller modal
+  const openDocumentViewer = (documentUrl, documentName, documentType = 'kyc') => {
+    setCurrentDocument({
+      url: documentUrl,
+      name: documentName,
+      type: documentType
+    });
+    setDocumentZoom(1);
+    setShowDocumentViewer(true);
+  };
+
+  const closeDocumentViewer = () => {
+    setShowDocumentViewer(false);
+    setCurrentDocument(null);
+    setDocumentZoom(1);
+  };
+
+  // Updated download function for current document in viewer
+  const downloadCurrentDocument = async () => {
+    if (currentDocument) {
+      await downloadDocument(currentDocument.url, currentDocument.name);
+    }
+  };
+
+  // Helper function to get file extension - Enhanced
+  const getFileExtension = (url) => {
+    try {
+      // Remove query parameters and get the last part after the last dot
+      const cleanUrl = url.split('?')[0];
+      const extension = cleanUrl.split('.').pop().toLowerCase();
+      
+      // Validate common file extensions
+      const validExtensions = ['jpg', 'jpeg', 'png', 'pdf', 'gif', 'doc', 'docx', 'txt'];
+      return validExtensions.includes(extension) ? extension : 'jpg';
+    } catch (error) {
+      console.error('Error getting file extension:', error);
+      return 'jpg';
+    }
+  };
+
+  // Enhanced notification with better styling
+  const showDownloadNotification = () => {
+    // Remove any existing notifications
+    const existingNotifications = document.querySelectorAll('.download-notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    const notification = document.createElement('div');
+    notification.className = 'download-notification fixed top-4 right-4 bg-green-500 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 animate-pulse';
+    notification.innerHTML = `
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+      </svg>
+      <span class="font-medium">Download started successfully!</span>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // Remove notification after 4 seconds
+    setTimeout(() => {
+      if (notification.parentNode) {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateX(100%)';
+        notification.style.transition = 'all 0.3s ease-out';
+        
+        setTimeout(() => {
+          if (notification.parentNode) {
+            document.body.removeChild(notification);
+          }
+        }, 300);
+      }
+    }, 4000);
+  };
+
+  const zoomIn = () => {
+    setDocumentZoom(prev => Math.min(prev + 0.2, 3));
+  };
+
+  const zoomOut = () => {
+    setDocumentZoom(prev => Math.max(prev - 0.2, 0.5));
+  };
 
   // Apply table-specific filters
   const applyTableFilters = () => {
@@ -354,6 +441,81 @@ export default function DriversAdminPage() {
     }
   };
 
+  // Enhanced download function - Updated with better error handling and CORS support
+  const downloadDocument = async (url, filename) => {
+    try {
+      // First, try to fetch with proper headers
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+        mode: 'cors'
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.style.display = 'none';
+      link.href = downloadUrl;
+      
+      // Get file extension from URL or default to jpg
+      const fileExtension = getFileExtension(url);
+      link.download = `${filename}.${fileExtension}`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(downloadUrl);
+      
+      showDownloadNotification();
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      
+      // Fallback method 1: Try direct download
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        const fileExtension = getFileExtension(url);
+        link.download = `${filename}.${fileExtension}`;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showDownloadNotification();
+      } catch (fallbackError) {
+        console.error('Fallback download failed:', fallbackError);
+        
+        // Fallback method 2: Open in new tab with download intent
+        try {
+          // Create a temporary form to force download
+          const form = document.createElement('form');
+          form.method = 'GET';
+          form.action = url;
+          form.target = '_blank';
+          form.style.display = 'none';
+          document.body.appendChild(form);
+          form.submit();
+          document.body.removeChild(form);
+          
+          // Show notification after a delay
+          setTimeout(() => {
+            showDownloadNotification();
+          }, 1000);
+        } catch (finalError) {
+          console.error('All download methods failed:', finalError);
+          alert('Download failed. The file might be protected or the URL is invalid. Please try opening the document in a new tab.');
+        }
+      }
+    }
+  };
+
   // Enhanced Status Badge with Boolean Support
   const getStatusBadge = (kycApproved, kycStatus, documentCount = 0) => {
     const displayStatus = getKYCDisplayStatus(kycApproved, kycStatus, documentCount);
@@ -476,29 +638,6 @@ export default function DriversAdminPage() {
       .replace(/_/g, ' ')
       .replace(/\b\w/g, l => l.toUpperCase())
       .replace('Id', 'ID');
-  };
-
-  // Enhanced download function
-  const downloadDocument = async (url, filename) => {
-    try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(downloadUrl);
-    } catch (error) {
-      console.error('Error downloading file:', error);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      link.target = '_blank';
-      link.click();
-    }
   };
 
   // Enhanced Actions Dropdown
@@ -867,7 +1006,6 @@ export default function DriversAdminPage() {
                       </div>
                     </TableCell>
                     
-                    {/* UPDATED: KYC Status Cell - Approve/Reject Buttons REMOVED */}
                     <TableCell>
                       <div className="space-y-2">
                         {getKYCStatusBadgeWithCount(
@@ -875,7 +1013,6 @@ export default function DriversAdminPage() {
                           Object.keys(driver.kycDocuments || {}).length,
                           driver
                         )}
-                        {/* REMOVED: Approve/Reject buttons are no longer here */}
                       </div>
                     </TableCell>
                     
@@ -997,7 +1134,12 @@ export default function DriversAdminPage() {
                           <img
                             src={selectedDriver.vehicle.photoUrl}
                             alt="Vehicle"
-                            className="w-24 h-16 object-cover border rounded"
+                            className="w-24 h-16 object-cover border rounded cursor-pointer hover:opacity-80"
+                            onClick={() => openDocumentViewer(
+                              selectedDriver.vehicle.photoUrl, 
+                              `${selectedDriver.name}_vehicle_photo`, 
+                              'vehicle'
+                            )}
                           />
                         </div>
                       )}
@@ -1019,18 +1161,27 @@ export default function DriversAdminPage() {
                           <strong>Vehicle Document:</strong>
                           <div className="flex gap-2 mt-2">
                             <button
-                              onClick={() => window.open(selectedDriver.vehicle.documentUrl, '_blank')}
+                              onClick={() => openDocumentViewer(
+                                selectedDriver.vehicle.documentUrl, 
+                                `${selectedDriver.name}_vehicle_document`, 
+                                'vehicle'
+                              )}
                               className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1"
                             >
                               <Eye className="w-3 h-3" />
                               View Document
                             </button>
                             <button
-                              onClick={() => downloadDocument(
-                                selectedDriver.vehicle.documentUrl,
-                                `${selectedDriver.name}_vehicle_document`
-                              )}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                downloadDocument(
+                                  selectedDriver.vehicle.documentUrl,
+                                  `${selectedDriver.name}_Vehicle_Document`
+                                );
+                              }}
                               className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1"
+                              type="button"
                             >
                               <Download className="w-3 h-3" />
                               Download
@@ -1077,22 +1228,32 @@ export default function DriversAdminPage() {
                             {docData.url ? (
                               <>
                                 <button
-                                  onClick={() => window.open(docData.url, '_blank')}
+                                  onClick={() => openDocumentViewer(
+                                    docData.url, 
+                                    `${selectedDriver.name}_${docType}`, 
+                                    'kyc'
+                                  )}
                                   className="px-3 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center gap-1 transition-colors"
                                 >
                                   <Eye className="w-3 h-3" />
                                   View
                                 </button>
                                 <button
-                                  onClick={() => downloadDocument(
-                                    docData.url,
-                                    `${selectedDriver.name}_${docType}`
-                                  )}
-                                  className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 transition-colors"
-                                >
-                                  <Download className="w-3 h-3" />
-                                  Download
-                                </button>
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                downloadDocument(
+                                  docData.url,
+                                  `${selectedDriver.name}_${docType}_KYC`
+                                );
+                              }}
+                              className="px-3 py-1 text-xs bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 transition-colors"
+                              type="button"
+                              disabled={!docData.url}
+                            >
+                              <Download className="w-3 h-3" />
+                              Download
+                            </button>
                               </>
                             ) : (
                               <span className="text-xs text-gray-500 px-3 py-1 bg-gray-200 rounded">No file</span>
@@ -1111,7 +1272,7 @@ export default function DriversAdminPage() {
               </Card>
             </div>
 
-            {/* Action Buttons (These remain in the modal) */}
+            {/* Action Buttons */}
             <div className="flex justify-center gap-4 mt-6">
               {getKYCDisplayStatus(selectedDriver.kyc_approved, selectedDriver.kycStatus, Object.keys(selectedDriver.kycDocuments || {}).length) === 'pending' && (
                 <div className="flex gap-2">
@@ -1173,6 +1334,95 @@ export default function DriversAdminPage() {
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Small Document Viewer Modal - Updated for smaller size */}
+      {showDocumentViewer && currentDocument && (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+          <div className="relative bg-white rounded-lg max-w-2xl max-h-[80vh] w-full mx-4 flex flex-col">
+            {/* Header - Compact */}
+            <div className="flex justify-between items-center p-3 bg-gray-50 rounded-t-lg border-b">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold text-gray-800 truncate">
+                  {formatDocumentName(currentDocument.name)}
+                </h3>
+                <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                  {currentDocument.type.toUpperCase()}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={zoomOut}
+                    className="p-1 bg-gray-100 rounded hover:bg-gray-200 transition-colors text-xs"
+                    disabled={documentZoom <= 0.5}
+                  >
+                    <ZoomOut className="w-3 h-3" />
+                  </button>
+                  <span className="text-xs text-gray-600 min-w-[40px] text-center">
+                    {Math.round(documentZoom * 100)}%
+                  </span>
+                  <button
+                    onClick={zoomIn}
+                    className="p-1 bg-gray-100 rounded hover:bg-gray-200 transition-colors text-xs"
+                    disabled={documentZoom >= 3}
+                  >
+                    <ZoomIn className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    downloadCurrentDocument();
+                  }}
+                  className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 flex items-center gap-1 transition-colors text-xs"
+                  type="button"
+                >
+                  <Download className="w-3 h-3" />
+                  Download
+                </button>
+                <button
+                  onClick={closeDocumentViewer}
+                  className="p-1 bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+
+            {/* Document Content - Scrollable */}
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto bg-gray-100">
+              <div className="max-w-full max-h-full flex items-center justify-center">
+                {currentDocument.url.toLowerCase().includes('.pdf') ? (
+                  <iframe
+                    src={currentDocument.url}
+                    className="border-0 bg-white shadow-lg rounded"
+                    style={{ 
+                      width: `${400 * documentZoom}px`,
+                      height: `${500 * documentZoom}px`,
+                      minWidth: '300px',
+                      minHeight: '400px'
+                    }}
+                    title="Document Viewer"
+                  />
+                ) : (
+                  <img
+                    src={currentDocument.url}
+                    alt={currentDocument.name}
+                    className="max-w-full max-h-full object-contain shadow-lg rounded bg-white"
+                    style={{ 
+                      transform: `scale(${documentZoom})`,
+                      transformOrigin: 'center center',
+                      maxWidth: '500px',
+                      maxHeight: '400px'
+                    }}
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>

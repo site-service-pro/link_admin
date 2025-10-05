@@ -17,6 +17,17 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import {
   Bar,
   BarChart,
   ResponsiveContainer,
@@ -43,7 +54,11 @@ import {
   AlertTriangle,
   FileText,
   LogOut,
+  Search,
+  Filter,
+  User,
 } from "lucide-react";
+
 
 function DashboardContent() {
   const router = useRouter();
@@ -68,6 +83,13 @@ function DashboardContent() {
   const [revenueData, setRevenueData] = useState([]);
   const [recentBookings, setRecentBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // New state for user table and filtering
+  const [allUsers, setAllUsers] = useState([]);
+  const [filteredUsers, setFilteredUsers] = useState([]);
+  const [userFilter, setUserFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
+
 
   // Get user from localStorage once component mounts
   useEffect(() => {
@@ -87,10 +109,12 @@ function DashboardContent() {
     }
   }, []);
 
+
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
     window.location.href = '/login';
   };
+
 
   // Helper function to determine KYC display status
   const getKYCDisplayStatus = (kycApproved, kycStatus, documentCount) => {
@@ -102,6 +126,48 @@ function DashboardContent() {
     }
     return kycStatus || "not-submitted";
   };
+
+
+  // Filter users based on search term and role
+  const filterUsers = (searchTerm, role) => {
+    let filtered = allUsers;
+
+    // Filter by search term (ID, email, name)
+    if (searchTerm) {
+      filtered = filtered.filter(user => 
+        user.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.email && user.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (user.name && user.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (user.displayName && user.displayName.toLowerCase().includes(searchTerm.toLowerCase()))
+      );
+    }
+
+    // Filter by role
+    if (role !== 'all') {
+      filtered = filtered.filter(user => {
+        if (role === 'rider') {
+          return user.role === 'client' || user.role === 'customer' || user.role === 'rider' || !user.role;
+        }
+        return user.role === role;
+      });
+    }
+
+    setFilteredUsers(filtered);
+  };
+
+  // Handle search input change
+  const handleSearchChange = (e) => {
+    const searchTerm = e.target.value;
+    setUserFilter(searchTerm);
+    filterUsers(searchTerm, roleFilter);
+  };
+
+  // Handle role filter change
+  const handleRoleFilterChange = (role) => {
+    setRoleFilter(role);
+    filterUsers(userFilter, role);
+  };
+
 
   // Fetch bookings data from Firestore
   const fetchBookingsData = async () => {
@@ -117,6 +183,7 @@ function DashboardContent() {
         ...doc.data(),
       }));
 
+
       // Calculate booking statistics
       const activeBookings = bookingsData.filter(
         (booking) =>
@@ -126,18 +193,22 @@ function DashboardContent() {
           booking.status === "accepted"
       ).length;
 
+
       const completedBookings = bookingsData.filter(
         (booking) => booking.status === "completed"
       ).length;
+
 
       const cancelledBookings = bookingsData.filter(
         (booking) => booking.status === "cancelled"
       ).length;
 
+
       const pendingBookings = bookingsData.filter(
         (booking) =>
           booking.status === "pending" || booking.status === "requested"
       ).length;
+
 
       // Calculate total revenue from completed bookings
       const totalRevenue = bookingsData
@@ -147,8 +218,10 @@ function DashboardContent() {
           0
         );
 
+
       // Get recent bookings for activity feed
       const recentBookings = bookingsData.slice(0, 5);
+
 
       return {
         activeBookings,
@@ -173,14 +246,17 @@ function DashboardContent() {
     }
   };
 
+
   // Generate weekly revenue data from bookings
   const generateWeeklyRevenueData = (bookings) => {
     const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
     const weeklyStats = days.map((day) => ({ day, revenue: 0, bookings: 0 }));
 
+
     // Get current week's bookings
     const now = new Date();
     const weekStart = new Date(now.setDate(now.getDate() - now.getDay() + 1));
+
 
     bookings.forEach((booking) => {
       if (booking.createdAt && booking.status === "completed") {
@@ -191,6 +267,7 @@ function DashboardContent() {
           (bookingDate - weekStart) / (1000 * 60 * 60 * 24)
         );
 
+
         if (daysDiff >= 0 && daysDiff < 7) {
           weeklyStats[daysDiff].revenue += booking.fare || booking.amount || 0;
           weeklyStats[daysDiff].bookings += 1;
@@ -198,8 +275,10 @@ function DashboardContent() {
       }
     });
 
+
     return weeklyStats;
   };
+
 
   // Main function to fetch all dashboard data
   const fetchDashboardData = async () => {
@@ -217,15 +296,22 @@ function DashboardContent() {
         ...doc.data(),
       }));
 
+      // Store all users for the table
+      setAllUsers(usersData);
+      setFilteredUsers(usersData);
+
+
       // Separate drivers and clients based on role
       const driversData = usersData.filter((user) => user.role === "driver");
       const clientsData = usersData.filter(
         (user) =>
-          user.role === "client" || user.role === "customer" || !user.role
+          user.role === "client" || user.role === "customer" || user.role === "rider" || !user.role
       );
+
 
       // Fetch bookings data
       const bookingsStats = await fetchBookingsData();
+
 
       // Fetch KYC documents and vehicles for each driver
       const driversWithDetails = await Promise.all(
@@ -249,6 +335,7 @@ function DashboardContent() {
               };
             });
 
+
             // 2. Fetch vehicle from 'vehicles' subcollection
             const vehiclesQuery = collection(
               db,
@@ -262,6 +349,7 @@ function DashboardContent() {
               const vehicleDoc = vehiclesSnapshot.docs[0];
               vehicle = { id: vehicleDoc.id, ...vehicleDoc.data() };
             }
+
 
             return {
               ...driver,
@@ -284,11 +372,13 @@ function DashboardContent() {
         })
       );
 
+
       // Calculate statistics based on your actual data structure
       const totalDrivers = driversWithDetails.length;
       const activeDrivers = driversWithDetails.filter(
         (d) => d.is_active !== false
       ).length;
+
 
       // KYC Statistics using the same logic as your drivers table
       let kycVerified = 0;
@@ -297,12 +387,14 @@ function DashboardContent() {
       let kycSubmitted = 0;
       let kycNotSubmitted = 0;
 
+
       driversWithDetails.forEach((driver) => {
         const kycStatus = getKYCDisplayStatus(
           driver.kyc_approved,
           driver.kycStatus,
           driver.kycDocumentCount
         );
+
 
         switch (kycStatus) {
           case "verified":
@@ -322,6 +414,7 @@ function DashboardContent() {
         }
       });
 
+
       // Vehicle Statistics
       const vehicleActive = driversWithDetails.filter(
         (d) => d.vehicleActive !== false && d.vehicle
@@ -332,6 +425,7 @@ function DashboardContent() {
       const vehiclesWithoutInfo = driversWithDetails.filter(
         (d) => !d.vehicle
       ).length;
+
 
       // Update stats with real bookings data
       setStats({
@@ -350,8 +444,10 @@ function DashboardContent() {
         vehiclesWithoutInfo,
       });
 
+
       // Set recent bookings for activity feed
       setRecentBookings(bookingsStats.recentBookings);
+
 
       // Generate monthly registration data
       const monthlyData = generateMonthlyRegistrationData(
@@ -359,6 +455,7 @@ function DashboardContent() {
         clientsData
       );
       setChartData(monthlyData);
+
 
       // Updated pie chart data for KYC status distribution
       setPieData([
@@ -368,6 +465,7 @@ function DashboardContent() {
         { name: "Submitted", value: kycSubmitted, color: "#3b82f6" },
         { name: "Not Submitted", value: kycNotSubmitted, color: "#6b7280" },
       ]);
+
 
       // Generate dynamic revenue data based on actual bookings
       const weeklyRevenueData = generateWeeklyRevenueData(
@@ -380,6 +478,7 @@ function DashboardContent() {
       setLoading(false);
     }
   };
+
 
   // Generate monthly registration data based on creation dates
   const generateMonthlyRegistrationData = (drivers, clients) => {
@@ -399,11 +498,13 @@ function DashboardContent() {
     ];
     const currentYear = new Date().getFullYear();
 
+
     const monthlyStats = months.map((month) => ({
       month,
       drivers: 0,
       clients: 0,
     }));
+
 
     // Count drivers by month
     drivers.forEach((driver) => {
@@ -418,6 +519,7 @@ function DashboardContent() {
       }
     });
 
+
     // Count clients by month
     clients.forEach((client) => {
       if (client.createdAt) {
@@ -431,8 +533,10 @@ function DashboardContent() {
       }
     });
 
+
     return monthlyStats.slice(0, 6); // Show last 6 months
   };
+
 
   if (loading || !user) {
     return (
@@ -444,6 +548,7 @@ function DashboardContent() {
       </div>
     );
   }
+
 
   return (
     <div className="space-y-6 p-6">
@@ -458,6 +563,7 @@ function DashboardContent() {
           </p>
         </div>
       </div>
+
 
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -477,6 +583,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Drivers</CardTitle>
@@ -494,6 +601,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
@@ -509,6 +617,7 @@ function DashboardContent() {
             </p>
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -529,6 +638,7 @@ function DashboardContent() {
         </Card>
       </div>
 
+
       {/* Driver Management Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         <Card>
@@ -544,6 +654,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">KYC Pending</CardTitle>
@@ -557,6 +668,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">KYC Rejected</CardTitle>
@@ -569,6 +681,7 @@ function DashboardContent() {
             <p className="text-xs text-muted-foreground">Need resubmission</p>
           </CardContent>
         </Card>
+
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -585,6 +698,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
 
+
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">
@@ -600,6 +714,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
 
       {/* Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -637,6 +752,7 @@ function DashboardContent() {
             </ChartContainer>
           </CardContent>
         </Card>
+
 
         {/* KYC Status Distribution */}
         <Card>
@@ -679,6 +795,7 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
 
       {/* Revenue Chart */}
       <Card>
@@ -725,6 +842,131 @@ function DashboardContent() {
           </ChartContainer>
         </CardContent>
       </Card>
+
+
+      {/* Users Table */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>All Users</CardTitle>
+              <CardDescription>
+                Complete list of all registered users with filtering options
+              </CardDescription>
+            </div>
+            <div className="flex space-x-2">
+              <Button
+                variant={roleFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleRoleFilterChange('all')}
+              >
+                All ({allUsers.length})
+              </Button>
+              <Button
+                variant={roleFilter === 'driver' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleRoleFilterChange('driver')}
+              >
+                Drivers Details ({allUsers.filter(u => u.role === 'driver').length})
+              </Button>
+              <Button
+                variant={roleFilter === 'rider' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => handleRoleFilterChange('rider')}
+                className="flex items-center space-x-1"
+              >
+                <User className="h-3 w-3" />
+                <span>Rider Details ({allUsers.filter(u => u.role === 'client' || u.role === 'customer' || u.role === 'rider' || !u.role).length})</span>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {/* Search Bar */}
+          <div className="flex items-center space-x-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search by User ID, email, or name..."
+                value={userFilter}
+                onChange={handleSearchChange}
+                className="pl-8"
+              />
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Showing {filteredUsers.length} of {allUsers.length} users
+            </div>
+          </div>
+
+          {/* Users Table */}
+          <div className="rounded-md border max-h-96 overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>User ID</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Created At</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell className="font-mono text-xs">
+                        {user.id}
+                      </TableCell>
+                      <TableCell>{user.email || 'N/A'}</TableCell>
+                      <TableCell>
+                        {user.name || user.displayName || 'N/A'}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          user.role === 'driver' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : user.role === 'client' || user.role === 'customer' || user.role === 'rider' || !user.role
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {user.role === 'client' || user.role === 'customer' || !user.role ? 'rider' : user.role}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          user.is_active !== false 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {user.is_active !== false ? 'Active' : 'Inactive'}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-gray-500">
+                        {user.createdAt 
+                          ? new Date(
+                              user.createdAt.toDate 
+                                ? user.createdAt.toDate() 
+                                : user.createdAt
+                            ).toLocaleDateString()
+                          : 'N/A'
+                        }
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      No users found matching your criteria
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
 
       {/* Recent Activity */}
       <Card>
@@ -823,6 +1065,7 @@ function DashboardContent() {
     </div>
   );
 }
+
 
 export default function Dashboard() {
   return (
